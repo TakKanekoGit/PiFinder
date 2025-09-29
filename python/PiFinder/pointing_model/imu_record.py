@@ -10,7 +10,10 @@ TODO: Remove this in the future.
 import time
 import board
 import adafruit_bno055
-import numpy as np
+#import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 # import logging
 
 
@@ -70,15 +73,83 @@ class ImuSimple:
         return new_sample_available
 
 
+class RecordDataStream:
+    """
+    Records data from multiple sensors and writes to a Parquet file.
+    """
+    BUFFER_SIZE = 100  # Flush the buffer every BUFFER_SIZE samples
+    # Data types:
+    DATA_TYPE_IMU_QUAT = 1
+    DATA_TYPE_PLATE_SOLVE = 2
+
+    # Define a unified schema with a struct for all possible sensor fields
+    schema = pa.schema([
+        ("data_type", pa.int64()),
+        ("timestamp", pa.timestamp("s")),
+        ("data", pa.struct([
+            ("qw", pa.float64()),    # Quaternion qw 
+            ("qx", pa.float64()),       
+            ("qy", pa.float64()),        
+            ("qz", pa.float64()),       
+            ("RA", pa.float64()),  # RA
+            ("Dec", pa.float64()),  # Dec
+            ("Roll", pa.float64()),  # Roll
+        ]))
+    ])
+
+    def __init__(self, file_name="pifinder_recording.parquet"):
+        self.file_name = file_name
+        self.buffer = []
+
+    def store_imu_quaternion(self, timestamp: float, quat: tuple):
+        """ Store IMU quaternion data to the buffer """
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_QUAT, 
+            "timestamp": timestamp, 
+            "data": {"qw": quat[0], "qx": quat[1], "qy": quat[2], "qz": quat[3]}
+            })
+        self.check_buffer_size_and_flush()
+
+    def store_plate_solving(self, timestamp: float, RA: float, Dec: float, Roll: float):
+        """ Store IMU quaternion data to the buffer """
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_QUAT, 
+            "timestamp": timestamp, 
+            "data": {"RA": RA, "Dec": Dec, "Roll": Roll}
+            })
+        self.check_buffer_size_and_flush()
+
+    def check_buffer_size_and_flush(self):
+        """ Check if the buffer size exceeds the limit and flush if needed """
+        if len(self.buffer) >= self.BUFFER_SIZE:
+            self.flush_buffer()
+
+    def flush_buffer(self):
+        """ Write the buffer to a Parquet file and clear the buffer """
+        if not self.buffer:
+            return
+        
+        table = pa.Table.from_pylist(self.buffer, schema=self.schema)
+        pq.write_table(table, self.file_name, append=True)  # Append to file
+        self.buffer = []  # Flush the buffer
+
+
 def imu_monitor():
     # MultiprocLogging.configurer(log_queue)
     imu = ImuSimple()
+    #record = RecordDataStream(file_name="imu_recording.parquet")
 
+    n_samples = 0
     while True:
         if imu.update():
-            print(
-                f"IMU: quat={imu.quat}, time={imu.timestamp:.3f}"
-            )
-        
+            #print(
+            #    f"IMU: quat={imu.quat}, time={imu.timestamp:.3f}"
+            #)
+            #record.store_imu_quaternion(imu.timestamp, imu.quat)
+            n_samples += 1
+            if n_samples >= 1000:
+                break
+
+
 if __name__ == "__main__":
     imu_monitor()
