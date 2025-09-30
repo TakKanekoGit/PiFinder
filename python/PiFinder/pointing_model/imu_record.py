@@ -7,11 +7,11 @@ Prints the IMU measurements (based on imu_pi.py)
 TODO: Remove this in the future.
 '''
 
-import time
-import board
 import adafruit_bno055
+import board
+import json
+import time
 #import numpy as np
-
 
 class ImuSimple:
     def __init__(self):
@@ -59,6 +59,58 @@ class ImuSimple:
         self.timestamp = timestamp
 
         return new_sample_available
+
+
+class RecordDataStream:
+    '''
+    Records data from multiple sensors and writes to a file using jsonl.
+    '''
+    BUFFER_SIZE = 1000  # Flush the buffer every BUFFER_SIZE samples
+    # Data types:
+    DATA_TYPE_IMU_QUAT = 1
+    DATA_TYPE_PLATE_SOLVE = 2
+
+    def __init__(self, file_name="pifinder_recording.jsonl"):
+        self.file_name = file_name
+        self.buffer = []
+
+    def store_imu_quaternion(self, timestamp: float, quat: tuple):
+        ''' Store IMU quaternion data to the buffer '''
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_QUAT, 
+            "timestamp": timestamp, 
+            "data": {"qw": quat[0], "qx": quat[1], "qy": quat[2], "qz": quat[3]}
+            })
+        self.check_buffer_size_and_flush()
+
+    def store_plate_solving(self, timestamp: float, RA: float, Dec: float, Roll: float):
+        ''' Store IMU quaternion data to the buffer '''
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_QUAT, 
+            "timestamp": timestamp, 
+            "data": {"RA": RA, "Dec": Dec, "Roll": Roll}
+            })
+        self.check_buffer_size_and_flush()
+
+    def check_buffer_size_and_flush(self):
+        ''' Check if the buffer size exceeds the limit and flush if needed '''
+        if len(self.buffer) >= self.BUFFER_SIZE:
+            self.flush_buffer()
+
+    def flush_buffer(self):
+        ''' 
+        Write the buffer to a Parquet file and clear the buffer. Make sure to
+        call this before exiting the program to avoid losing the last set of
+        data in the buffer.
+        '''
+        if not self.buffer:
+            return
+        
+        with open(self.file_name, "a") as f:
+            for record in self.buffer:
+                f.write(json.dumps(record) + "\n")
+        
+        self.buffer = []  # Flush the buffer
 
 
 """
@@ -131,7 +183,7 @@ class RecordDataStreamParquet:
 
 def imu_monitor():
     imu = ImuSimple()
-    record = RecordDataStream(file_name="imu_recording.parquet")
+    record = RecordDataStream(file_name="imu_recording.jsonl")
 
     n_samples = 0
     while True:
@@ -141,9 +193,10 @@ def imu_monitor():
             #)
             record.store_imu_quaternion(imu.timestamp, imu.quat)
             n_samples += 1
-            if n_samples % 10 == 0:
+            if n_samples % 100 == 0:
                 print(f"Recorded {n_samples} IMU samples...")
             if n_samples >= 1000:
+                record.flush_buffer()
                 break
 
 
