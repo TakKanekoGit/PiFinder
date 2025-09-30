@@ -9,6 +9,7 @@ TODO: Remove this in the future.
 
 import adafruit_bno055
 import board
+import datetime
 import json
 import time
 #import numpy as np
@@ -67,12 +68,30 @@ class RecordDataStream:
     '''
     BUFFER_SIZE = 1000  # Flush the buffer every BUFFER_SIZE samples
     # Data types:
+    DATA_TYPE_DATETIME = 0
     DATA_TYPE_IMU_QUAT = 1
     DATA_TYPE_PLATE_SOLVE = 2
 
     def __init__(self, file_name="pifinder_recording.jsonl"):
+        ''' Note that this will append to an existing file '''
         self.file_name = file_name
         self.buffer = []
+        self.n_records = 0  # Counter to the number of records written
+        self.store_current_datetime()  # Store the start time
+
+    def store_current_datetime(self):
+        ''' Store the current UTC time to the buffer '''
+        now = datetime.datetime.now(datetime.timezone.utc)
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_DATETIME, 
+            "timestamp": time.time(), 
+            "data": {
+                "date": now.strftime("%Y%m%d"), 
+                "time": now.strftime("%H:%M:%S"),
+                "timezone": "UTC",
+                }
+            })
+        self.check_buffer_size_and_flush()
 
     def store_imu_quaternion(self, timestamp: float, quat: tuple):
         ''' Store IMU quaternion data to the buffer '''
@@ -97,16 +116,24 @@ class RecordDataStream:
         if len(self.buffer) >= self.BUFFER_SIZE:
             self.flush_buffer()
 
+    def stop_recording(self):
+        ''' 
+        Call this to stop recording and flush the buffer. Make sure to call
+        this before exiting the program to avoid losing the last set of data in
+        the buffer. 
+        '''
+        self.store_current_datetime()  # Store the end time
+        self.flush_buffer() 
+
     def flush_buffer(self):
         ''' 
-        Write the buffer to a Parquet file and clear the buffer. Make sure to
-        call this before exiting the program to avoid losing the last set of
-        data in the buffer.
+        Write the buffer to a Parquet file and clear the buffer. 
         '''
         if not self.buffer:
             return
         
         with open(self.file_name, "a") as f:
+            self.n_records += len(self.buffer)
             for record in self.buffer:
                 f.write(json.dumps(record) + "\n")
         
@@ -195,8 +222,8 @@ def imu_monitor():
             n_samples += 1
             if n_samples % 100 == 0:
                 print(f"Recorded {n_samples} IMU samples...")
-            if n_samples >= 1000:
-                record.flush_buffer()
+            if n_samples >= 500:
+                record.stop_recording()
                 break
 
 
