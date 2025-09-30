@@ -1,18 +1,16 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-"""
+'''
 For testing the IMU: Not for use by PiFinder main loop.
 Prints the IMU measurements (based on imu_pi.py)
 
 TODO: Remove this in the future.
-"""
+'''
 
 import time
 import board
 import adafruit_bno055
 #import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 
 class ImuSimple:
@@ -30,10 +28,10 @@ class ImuSimple:
         self.imu_sample_frequency = 1 / 30
 
     def update(self):
-        """ 
+        ''' 
         Reads in the quaternion from the IMU. Returns True if a new valid
         sample is available. 
-        """
+        '''
         new_sample_available = False
 
         # check for update frequency
@@ -63,10 +61,16 @@ class ImuSimple:
         return new_sample_available
 
 
-class RecordDataStream:
-    """
+"""
+# Commented out because difficulty installing pyarrow with pip on the Raspberry Pi 
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+class RecordDataStreamParquet:
+    '''
     Records data from multiple sensors and writes to a Parquet file.
-    """
+    '''
     BUFFER_SIZE = 100  # Flush the buffer every BUFFER_SIZE samples
     # Data types:
     DATA_TYPE_IMU_QUAT = 1
@@ -92,7 +96,7 @@ class RecordDataStream:
         self.buffer = []
 
     def store_imu_quaternion(self, timestamp: float, quat: tuple):
-        """ Store IMU quaternion data to the buffer """
+        ''' Store IMU quaternion data to the buffer '''
         self.buffer.append({
             "data_type": self.DATA_TYPE_IMU_QUAT, 
             "timestamp": timestamp, 
@@ -101,7 +105,7 @@ class RecordDataStream:
         self.check_buffer_size_and_flush()
 
     def store_plate_solving(self, timestamp: float, RA: float, Dec: float, Roll: float):
-        """ Store IMU quaternion data to the buffer """
+        ''' Store IMU quaternion data to the buffer '''
         self.buffer.append({
             "data_type": self.DATA_TYPE_IMU_QUAT, 
             "timestamp": timestamp, 
@@ -110,18 +114,19 @@ class RecordDataStream:
         self.check_buffer_size_and_flush()
 
     def check_buffer_size_and_flush(self):
-        """ Check if the buffer size exceeds the limit and flush if needed """
+        ''' Check if the buffer size exceeds the limit and flush if needed '''
         if len(self.buffer) >= self.BUFFER_SIZE:
             self.flush_buffer()
 
     def flush_buffer(self):
-        """ Write the buffer to a Parquet file and clear the buffer """
+        ''' Write the buffer to a Parquet file and clear the buffer '''
         if not self.buffer:
             return
         
         table = pa.Table.from_pylist(self.buffer, schema=self.schema)
         pq.write_table(table, self.file_name, append=True)  # Append to file
         self.buffer = []  # Flush the buffer
+"""
 
 
 def imu_monitor():
