@@ -14,16 +14,6 @@ import adafruit_bno055
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-# import logging
-
-
-# from PiFinder import config
-
-# logger = logging.getLogger("IMU.pi")
-
-QUEUE_LEN = 10
-MOVE_CHECK_LEN = 2
-
 
 class ImuSimple:
     def __init__(self):
@@ -135,9 +125,8 @@ class RecordDataStream:
 
 
 def imu_monitor():
-    # MultiprocLogging.configurer(log_queue)
     imu = ImuSimple()
-    #record = RecordDataStream(file_name="imu_recording.parquet")
+    record = RecordDataStream(file_name="imu_recording.parquet")
 
     n_samples = 0
     while True:
@@ -145,8 +134,10 @@ def imu_monitor():
             #print(
             #    f"IMU: quat={imu.quat}, time={imu.timestamp:.3f}"
             #)
-            #record.store_imu_quaternion(imu.timestamp, imu.quat)
+            record.store_imu_quaternion(imu.timestamp, imu.quat)
             n_samples += 1
+            if n_samples % 10 == 0:
+                print(f"Recorded {n_samples} IMU samples...")
             if n_samples >= 1000:
                 break
 
