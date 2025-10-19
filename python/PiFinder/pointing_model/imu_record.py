@@ -26,19 +26,18 @@ class ImuSimple:
         self.last_sample_time = time.time()
 
         # Calibration settings
-        self.imu_sample_frequency = 1 / 30
+        self.imu_sample_frequency = 100.0 #30.0
+        self.imu_sample_period = 1 / self.imu_sample_frequency
 
     def update(self):
         ''' 
         Reads in the quaternion from the IMU. Returns True if a new valid
         sample is available. 
         '''
-        new_sample_available = False
-
-        # check for update frequency
+        # check for a new sample period
         timestamp = time.time()
-        if timestamp - self.last_sample_time < self.imu_sample_frequency:
-            return new_sample_available  # Wait for full sampling period
+        if timestamp - self.last_sample_time < self.imu_sample_period:
+            return False  # Not the end of the full sampling period
 
         # adafruit_bno055 returns quaternion convention (w, x, y, z)
         quat = self.sensor.quaternion  # Returns tuple so won't be over-written
@@ -48,18 +47,17 @@ class ImuSimple:
         self.calibration = self.sensor.calibration_status[1]
         if self.calibration == 0:
             # logger.warning("NOIMU CAL")
-            return new_sample_available  # IMU not calibrated
+            return False  # IMU not calibrated
 
         if quat[0] is None:
             # logger.warning("IMU: Failed to get sensor values")
-            return new_sample_available  # Failed to get sensor values
+            return False  # Failed to get sensor values
 
         # Valid sample obtained
-        new_sample_available = True
         self.quat = quat  # Scalar-first quaternion: (w, x, y, z)
         self.timestamp = timestamp
 
-        return new_sample_available
+        return True # New sample available
 
 
 class RecordDataStream:
@@ -211,6 +209,9 @@ class RecordDataStreamParquet:
 def imu_monitor():
     imu = ImuSimple()
     record = RecordDataStream(file_name="imu_recording.jsonl")
+    max_samples = 2000
+    update_interval = 500
+
 
     n_samples = 0
     while True:
@@ -220,9 +221,9 @@ def imu_monitor():
             #)
             record.store_imu_quaternion(imu.timestamp, imu.quat)
             n_samples += 1
-            if n_samples % 100 == 0:
+            if n_samples % update_interval == 0:
                 print(f"Recorded {n_samples} IMU samples...")
-            if n_samples >= 500:
+            if n_samples >= max_samples:
                 record.stop_recording()
                 break
 
