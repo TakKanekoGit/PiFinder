@@ -6,6 +6,7 @@ This module is for IMU related functions
 """
 
 import time
+from PiFinder import config
 from PiFinder.multiproclogging import MultiprocLogging
 import board
 import adafruit_bno055
@@ -46,8 +47,13 @@ class Imu:
         # First value is delta to exceed between samples
         # to start moving, second is threshold to fall below
         # to stop moving.
-        self.__moving_threshold = (0.0005, 0.0003)
 
+        cfg = config.Config()
+        imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
+        self.__moving_threshold = (
+            0.0005 * imu_threshold_scale,
+            0.0003 * imu_threshold_scale,
+        )
     def moving(self):
         """
         Compares most recent reading
@@ -140,6 +146,19 @@ class Imu:
 
 def imu_monitor(shared_state, console_queue, log_queue):
     MultiprocLogging.configurer(log_queue)
+    logger.debug("Starting IMU")
+    imu = None
+    try:
+        imu = Imu()
+    except Exception as e:
+        logger.error(f"Error starting phyiscal IMU : {e}")
+        logger.error("Falling back to fake IMU")
+        console_queue.put("IMU: Error starting physical IMU, using fake IMU")
+        console_queue.put("DEGRADED_OPS IMU")
+        from PiFinder.imu_fake import Imu as ImuFake
+
+        imu = ImuFake()
+
     imu = Imu()
     imu_calibrated = False
     # TODO: Remove move_start, move_end
@@ -147,7 +166,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
         "moving": False,
         "move_start": None,
         "move_end": None,
-        "quat": np.quaternion(
+        "quat": quaternion.quaternion(
             0, 0, 0, 0
         ),  # Scalar-first numpy quaternion(w, x, y, z) - Init to invalid quaternion
         "status": 0,
@@ -187,9 +206,13 @@ def imu_monitor(shared_state, console_queue, log_queue):
 
 
 if __name__ == "__main__":
-    print("Trying to read state from IMU")
-    imu = Imu()
-    for i in range(10):
-        imu.update()
-        time.sleep(0.5)
-    print(imu)
+    logging.basicConfig(level=logging.DEBUG)
+    logger.info("Trying to read state from IMU")
+    imu = None
+    try:
+        imu = Imu()
+        for i in range(10):
+            imu.update()
+            time.sleep(0.5)
+    except Exception as e:
+        logger.exception("Error starting phyiscal IMU", e)

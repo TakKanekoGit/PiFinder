@@ -9,20 +9,14 @@ README: IMU support prototyping
 
 See Discord thread: https://discord.com/channels/1087556380724052059/1406599296002035895
 
-Issues:
-* Fails nox
-
-TODO:
-* Sky test
 
 For future:
+* Calibration to align IMU frame to camera frame to remove the residual error.
 * Update imu_pi.py
-* Set alignment once at alignment rather than calculating it every loop
-    * Alignment is currently done in `integrator.py` where `set_alignment()` is
-    called every iteration of the loop. Would like to set the alignment onece
-    to pre-compute the `q_scope2cam` quaternion, etc.
+* Set alignment once at alignment rather than calculating it every loop?
 
 Done:
+* Fails nox
 * Support other PiFinder types
 * Adjust Roll depending on mount_type for charts
 * Lint
@@ -42,6 +36,18 @@ Done:
 # Sky test log
 
 >Remove this before release!
+
+## 20251001: c6422 (tested 5 Oct)
+
+* v2 Flat. Exposure 0.4s.
+* Tested in altaz mode. 
+* 97% full moon. Zenity NELM 3.
+* Worked fine. When moved quickly to a target, the IMU mode got it to within
+1-2° and then it snapped to the pointing from the plate solve and stayed there.
+I didn't see any jiggling of the SkySafari cursor when zoomed in at a scale of
+5° FOV.
+* Changes since last test: Cleaning up & refactoring. EQ mode angle changed to
+  +/-. Numpy version updated.  
 
 ## 20250831: af358e (tested 5/6 Aug)
 
@@ -87,12 +93,6 @@ cd ~/PiFinder/python
 python3 -m PiFinder.main
 ```
 
-For testing, running the following command will dump the raw IMU measurements to the terminal:
-
-```bash
-python PiFinder/imu_print_measurements.py
-```
-
 # Theory
 
 ## Quaternion rotation
@@ -125,7 +125,7 @@ $\mathbf{p^\prime} = \mathbf{qpq}^{-1}$
 In Numpy Quaternion, we can create a quaternion using
 
 ```python
-q = np.quaternion(w, x, y, z)
+q = quaternion.quaternion(w, x, y, z)
 ```
 
 Quaternion multiplications are simply `q1 * q2`.
@@ -251,11 +251,11 @@ The alignment offset between the PiFinder camera frame and the scope frame is
 determined during alignment of the PiFinder with the scope and is assumed to be
 fixed. The goal of alignment is to determine the quaternion $q_{cam2scope}$.
 
-During alignment, the user user selects the target seen in the center the
-scope, which gives the (RA, Dec) of the scope pointing but not the roll. We can
-assume some arbitrary roll value (say roll = 0) and get $q_{eq2scope}$. At the
-same time, plate solving measures the (RA, Dec, Roll) at the camera center or
-$q_{eq2cam}$. We can express the relation by,
+During alignment, the user user selects the target seen in the center of the
+eyepiece, which gives the (RA, Dec) of the scope pointing but not the roll. We
+can assume some arbitrary roll value (say roll = 0) and get $q_{eq2scope}$. At
+the same time, plate solving measures the (RA, Dec, Roll) at the camera center
+or $q_{eq2cam}$. We can express the relation by,
 
 $$q_{eq2scope} = q_{eq2cam} \; q_{cam2scope}$$
 
