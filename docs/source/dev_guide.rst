@@ -514,4 +514,151 @@ Second method: run PiFinder with the :ref:`dev_guide:Running/Debugging from the 
 .. image:: images/user_guide/DEMO_MODE_002_docs.png
 
 
+Guide for beta testers
+----------------------
 
+This section is a quick start guide for people who would like to contribute to
+the development of PiFinder by testing new features before they are released.
+If you're comfortable using the command line to connect to your PiFinder, 
+you'll have no problem.
+
+Connect to the PiFinder
+.......................
+
+You'll need to connect to the PiFinder using `ssh` (secure shell). If you're on
+Windows, download [PuTTy](https://www.chiark.greenend.org.uk/~sgtatham/putty/).
+If you're on a Mac or Linux, use the Terminal app. 
+ 
+Turn on your PiFinder and make sure that your computer is on the same WiFi
+network as the PiFinder.
+
+If you're using PuTTy, configure it connect to `pifinder@pifinder.local`. 
+You'll be asked for the password for your PiFinder. 
+
+If you're using a terminal, type the following and enter the password for your
+PiFinder:
+
+```bash 
+ssh pifinder@pifinder.local
+```
+
+Stopping and running the PiFinder
+.................................
+
+Once you've connected to the your PiFinder, change directory to the Python
+directory of the PiFinder:
+
+```bash cd ~/PiFinder/python ```
+
+You can stop the PiFinder process by typing
+
+```bash ps aux | grep PiFinder.main | awk '{system("kill -9  " $2)}' ```
+
+You can start up the PiFinder from the command line again by typing
+
+```bash python3 -m PiFinder.main ```
+
+You'll see lots of text printed to the screen. If you ran PiFinder this way, 
+you can stop it again by typing `Ctrl + C`.
+
+Get the test branch
+...................
+
+PiFinder uses `git` for version control. This makes it easy to switch between 
+the stable release branch and test branches.
+
+**TODO: Add how to check out the test branch for the first time**
+
+Check out the test branch
+.........................
+
+You can check out or switch to the test branch by typing
+
+```bash 
+git checkout <branch-name>
+```
+
+To ensure that you've got the latest version, run the following command to pull
+the latest changes from the repository:
+
+```bash 
+git pull 
+```
+
+The following command tells you which branch you're currently on:
+
+```bash 
+git status 
+```
+
+When reporting your test results, we need to know which version you tested.
+Please type the following command and note the first 6-8 characters of the SHA.
+This is a unique identification of the commit you tested. You can get a short
+version of this by typing
+
+```bash
+git rev-parse --short HEAD
+```
+
+You'll get a 7-digit hex code like `478a5c9`.
+
+Install the required new packages
+.................................
+
+If the branch needs new Python packages you may need to install them. This 
+should be a one-off action.
+
+```bash 
+pip install -r requirements.txt 
+```
+
+Start up the PiFinder and test
+..............................
+
+You can start up the PiFinder from the command line again by typing
+
+```bash 
+python3 -m PiFinder.main 
+```
+
+Inside the PiFinder application, make sure you set up your PiFinder type and
+the mount type correctly. The PiFinder is ready for testing. 
+
+When you start up PiFinder again, it will start up in this test branch. If you
+want to switch back to the release branch, you'll need to `ssh` into the
+PiFinder again and checkout the `release` branch:
+
+```bash 
+cd ~/PiFinder/python 
+git checkout release 
+```
+
+You should now be back to where you were before.
+
+Final checks
+............
+
+Before you go outside in the cold, it's worth doing a few checks indoors:
+
+1. From the main menu of the PiFinder, go to `Start` and then select `Focus``
+   mode so that the camera image gets displaced. Take off the lens cap. 
+   Does it look like the camera's working? No need to adjust the focus.
+2. Go to `Tools` then select `Test mode`. The PiFinder now enters the test mode
+   and starts running the internal algorithms using emulated data. Go to 
+   `Chart`. Do you see the chart move as you move as you move the PiFinder? It 
+   won't  move in the direction you expect it to move because it's in Test Mode.
+   This is just to check that the we don't get errors in the code.
+3. Restart the PiFinder.
+
+Report success or issues
+........................
+
+It would be helpful if you could get back with us with issues as well as if it
+was working.
+
+Can you also let me know the following information: - The SHA of the commit you
+tested. - PiFinder version (v2, v3, etc.) - PiFinder type (flat, left, etc.) -
+Mount type: Altaz, EQ, Portaball, etc.
+
+git rev-parse --short HEAD
+478a5c9
