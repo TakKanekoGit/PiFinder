@@ -23,6 +23,12 @@ class ImuSimple:
         i2c = board.I2C()
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.sensor.mode = adafruit_bno055.ACCGYRO_MODE
+        # Configure accelerometer:
+        self.sensor.accel_range = adafruit_bno055.ACCEL_4G
+        self.sensor.accel_bandwidth = adafruit_bno055.ACCEL_7_81HZ
+        # Configure gyro:
+        self.sensor.gyro_range = adafruit_bno055.GYRO_500_DPS
+        self.sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
 
         self.gyro = None  # Gyroscope data in rad/s
         self.accel = None  # Accelerometer data in m/s^2
@@ -136,7 +142,8 @@ class RecordDataStream:
         self.buffer.append({
             "data_type": self.DATA_TYPE_IMU_ACCEL, 
             "timestamp": timestamp, 
-            "data": {"ax": accel[0], "ay": accel[1], "az": accel[2]}
+            #"data": {"ax": accel[0], "ay": accel[1], "az": accel[2]}
+            "data": accel
             })
         self.check_buffer_size_and_flush()
 
@@ -145,7 +152,8 @@ class RecordDataStream:
         self.buffer.append({
             "data_type": self.DATA_TYPE_IMU_GYRO, 
             "timestamp": timestamp, 
-            "data": {"gx": gyro[0], "gy": gyro[1], "gz": gyro[2]}
+            #"data": {"gx": gyro[0], "gy": gyro[1], "gz": gyro[2]}
+            "data": gyro
             })
         self.check_buffer_size_and_flush()
 
@@ -179,7 +187,7 @@ class RecordDataStream:
         self.buffer = []  # Flush the buffer
 
 
-def imu_monitor(save_data=True):
+def imu_monitor(save_data=True, max_samples=500, update_interval=500):
 
     if save_data:
         dir = Path.home() / "PiFinder_data" / "telemetry"
@@ -193,8 +201,6 @@ def imu_monitor(save_data=True):
         record = None
 
     imu = ImuSimple()
-    max_samples = 100
-    update_interval = 500
 
     n_samples = 0
     while True:
@@ -220,4 +226,4 @@ def imu_monitor(save_data=True):
 
 
 if __name__ == "__main__":
-    imu_monitor(save_data=True)
+    imu_monitor(save_data=True, max_samples=500, update_interval=500)
