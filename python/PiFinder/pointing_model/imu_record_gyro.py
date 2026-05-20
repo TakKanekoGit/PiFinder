@@ -149,7 +149,7 @@ def imu_monitor():
 
     imu = ImuSimple()
     record = RecordDataStream(path=dir / f"{time_str}-imu_recording.jsonl")
-    max_samples = 2000
+    max_samples = 20
     update_interval = 500
 
 
