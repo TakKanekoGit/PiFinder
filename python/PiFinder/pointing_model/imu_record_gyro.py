@@ -59,7 +59,6 @@ class ImuSimple:
         if self.gyro_calibration_status == 0:
             logger.warning("IMU: Gyro not calibrated")
             return False  # Gyro not calibrated
-        # TODO: Check accelerometer cal status when it's used in future
         """
 
         if gyro[0] is None:
@@ -73,7 +72,7 @@ class ImuSimple:
 
         return True # New sample available
 
-    def sleep(self):
+    def sleep_until_next_sample(self):
         ''' Sleep for the remaining time in the sampling period '''
         sleep_time = self.imu_sample_period - (time.time() - self.last_sample_time)
         if sleep_time > 0:
@@ -89,6 +88,8 @@ class RecordDataStream:
     DATA_TYPE_DATETIME = 0
     DATA_TYPE_IMU_QUAT = 1
     DATA_TYPE_PLATE_SOLVE = 2
+    DATA_TYPE_IMU_ACCEL = 3
+    DATA_TYPE_IMU_GYRO = 4
 
     def __init__(self, path=Path("pifinder_recording.jsonl")):
         ''' Note that this will append to an existing file '''
@@ -130,6 +131,24 @@ class RecordDataStream:
             })
         self.check_buffer_size_and_flush()
 
+    def store_imu_accel(self, timestamp: float, accel: tuple):
+        ''' Store IMU accelerometer data to the buffer '''
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_ACCEL, 
+            "timestamp": timestamp, 
+            "data": {"ax": accel[0], "ay": accel[1], "az": accel[2]}
+            })
+        self.check_buffer_size_and_flush()
+
+    def store_imu_gyro(self, timestamp: float, gyro: tuple):
+        ''' Store IMU gyroscope data to the buffer '''
+        self.buffer.append({
+            "data_type": self.DATA_TYPE_IMU_GYRO, 
+            "timestamp": timestamp, 
+            "data": {"gx": gyro[0], "gy": gyro[1], "gz": gyro[2]}
+            })
+        self.check_buffer_size_and_flush()
+
     def check_buffer_size_and_flush(self):
         ''' Check if the buffer size exceeds the limit and flush if needed '''
         if len(self.buffer) >= self.BUFFER_SIZE:
@@ -143,6 +162,7 @@ class RecordDataStream:
         '''
         self.store_current_datetime()  # Store the end time
         self.flush_buffer() 
+        print('Stopped recording')
 
     def flush_buffer(self):
         ''' 
@@ -162,7 +182,7 @@ class RecordDataStream:
 def imu_monitor(save_data=True):
 
     if save_data:
-        dir = Path("~/PiFinder_data/telemetry")
+        dir = Path.home() / "PiFinder_data" / "telemetry"
         if not Path(dir).exists():
             print(f"Directory {dir} does not exist. Creating it.")
             Path(dir).mkdir(parents=True, exist_ok=True)
@@ -180,7 +200,9 @@ def imu_monitor(save_data=True):
     while True:
         if imu.update():
             if save_data:
-                record.store_imu_quaternion(imu.timestamp, imu.quat)
+                #record.store_imu_quaternion(imu.timestamp, imu.quat)
+                record.store_imu_accel(imu.timestamp, imu.accel)
+                record.store_imu_gyro(imu.timestamp, imu.gyro)
             else:
                 print(
                     f"IMU: gyro={imu.gyro}, acc={imu.accel}, time={imu.timestamp:.3f}"
@@ -194,8 +216,8 @@ def imu_monitor(save_data=True):
                     record.stop_recording()
                 break
         else:
-            imu.sleep()  # Sleep for the remaining time in the sampling period
+            imu.sleep_until_next_sample()  # Sleep for the remaining time in the sampling period
 
 
 if __name__ == "__main__":
-    imu_monitor(save_data=False)
+    imu_monitor(save_data=True)
