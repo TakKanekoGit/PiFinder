@@ -5,6 +5,7 @@ This module is for IMU related functions
 
 """
 
+from typing import Union
 import time
 from PiFinder import config
 from PiFinder.multiproclogging import MultiprocLogging
@@ -24,111 +25,168 @@ class Imu:
     measurements using its native axes and the transformation from the IMU
     axes to the camera frame is done by the IMU dead-reckonig functionality.
     """
+    MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
+    N_GYRO_CAL_SAMPLES = 150
 
     def __init__(self):
-        i2c = board.I2C()
-        self.sensor = adafruit_bno055.BNO055_I2C(i2c)
-        # IMPLUS mode: Accelerometer + Gyro + Fusion data
-        self.sensor.mode = adafruit_bno055.IMUPLUS_MODE
-        # self.sensor.mode = adafruit_bno055.NDOF_MODE
+        self.sensor = self.configure_imu_bno055()
 
-        self.quat_history = [(0, 0, 0, 0)] * QUEUE_LEN
-        self._flip_count = 0
-        self.calibration = 0
-        self.avg_quat = (0, 0, 0, 0)  # Scalar-first quaternion as float: (w, x, y, z)
         self.__moving = False
-        self.__reading_diff = 0.0
 
-        self.last_sample_time = time.time()
-
-        # Calibration settings
+        # Sampling frequency
         self.imu_sample_frequency = 1 / 30
+        self.imu_sample_period = 1 / self.imu_sample_frequency
 
-        # First value is delta to exceed between samples
-        # to start moving, second is threshold to fall below
-        # to stop moving.
+        # IMU data
+        self.timestamp = None
+        self.gyro = None  # Gyroscope data in rad/s
+        self.accel = None  # Accelerometer data in m/s^2
+        self.quat = None  # Quaternion data quaternion.quaternion(w, x, y, z)
+        self.outdated_data = True
 
+        self.last_sample_time = time.time()  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
+
+        # Calibration
+        self.gyro_calibrated = False
+        #self.accel_calibrated = False
+        self.gyro_offsets = None
+
+        # Internal states
+        self.moving = False
+
+        # First value is delta to exceed between samples to start moving,
+        # second is threshold to fall below to stop moving.
         cfg = config.Config()
-        imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
-        self.__moving_threshold = (
-            0.0005 * imu_threshold_scale,
-            0.0003 * imu_threshold_scale,
-        )
+        #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
+        self.moving_thresholds = (0.5, 0.3)
 
-    def moving(self):
+    def configure_imu_bno055(self):
         """
-        Compares most recent reading
-        with past readings
+        Configure the IMU.
+
+        Accelerometer:
+
+        Accelerometer range options:
+        ACCEL_2G, ACCEL_4G, ACCEL_8G, ACCEL_16G
+
+        Bandwidth options:
+        ACCEL_7_81HZ, ACCEL_15_63HZ, ACCEL_31_25HZ, ACCEL_62_5HZ,
+        ACCEL_125HZ, ACCEL_250HZ, ACCEL_500HZ, ACCEL_1000HZ
+
+        Gyro::
+
+        Gyro range options:
+        GYRO_2000_DPS, GYRO_1000_DPS, GYRO_500_DPS, GYRO_250_DPS, GYRO_125_DPS
+
+        Gyro bandwidth options:
+        GYRO_523HZ, GYRO_230HZ, GYRO_116HZ, GYRO_47HZ, GYRO_23HZ, GYRO_12HZ
+        GYRO_64HZ, GYRO_32HZ
         """
-        return self.__moving
+        i2c = board.I2C()
+        sensor = adafruit_bno055.BNO055_I2C(i2c)
+        # ACCGYRO mode: Accelerometer + Gyro data only, no fusion
+        sensor.mode = adafruit_bno055.ACCGYRO_MODE
 
-    def update(self):
-        # check for update frequency
-        if time.time() - self.last_sample_time < self.imu_sample_frequency:
-            return
+        # Configure accelerometer: Range +/-4G, Bandwidth 7.81Hz
+        sensor.accel_range = adafruit_bno055.ACCEL_4G
+        sensor.accel_bandwidth = adafruit_bno055.ACCEL_7_81HZ
 
-        self.last_sample_time = time.time()
+        # Configure gyro: Range +/-500 dps, Bandwidth 12Hz
+        sensor.gyro_range = adafruit_bno055.GYRO_500_DPS
+        sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
 
-        # Throw out non-calibrated data
-        self.calibration = self.sensor.calibration_status[1]
-        if self.calibration == 0:
-            logger.warning("NOIMU CAL")
-            return True
-        # adafruit_bno055 uses quaternion convention (w, x, y, z)
-        quat = self.sensor.quaternion
-        if quat[0] is None:
-            logger.warning("IMU: Failed to get sensor values")
-            return
+        return sensor
 
-        _quat_diff = []
-        for i in range(4):
-            _quat_diff.append(abs(quat[i] - self.quat_history[-1][i]))
+    def read_raw_data(self):
+        """ 
+        Reads in the data from the IMU and returns the raw, uncalibrated
+        data.
+        """
+        # check for a new sample period
+        if time.time() - self.last_sample_time < self.imu_sample_period:
+            self.sleep_until_next_sample()
 
-        self.__reading_diff = sum(_quat_diff)
+        # Read in the new sample
+        self.outdated_data = True
+        timestamp, accel, gyro = self.read_from_imu()
+        self.last_sample_time = timestamp
 
-        # This seems to be some sort of defect / side effect
-        # of the integration system in the BNO055
-        # When not moving quat output will vaccilate
-        # by exactly this amount... so filter this out
-        if self.__reading_diff == 0.0078125:
-            self.__reading_diff = 0
-            return
+        return timestamp, accel, gyro
 
-        # Sometimes the quat output will 'flip' and change by 2.0+
-        # from one reading to another.  This is clearly noise or an
-        # artifact, so filter them out
-        #
-        # NOTE: This is probably due to the double-cover property of quaternions
-        # where +q and -q describe the same rotation?
-        if self.__reading_diff > 1.5:
-            self._flip_count += 1
-            if self._flip_count > 10:
-                # with the history initialized to 0,0,0,0 the unit
-                # can get stuck seeing flips if the IMU starts
-                # returning data. This count will reset history
-                # to the current state if it exceeds 10
-                self.quat_history = [quat] * QUEUE_LEN
-                self.__reading_diff = 0
-            else:
-                self.__reading_diff = 0
-                return
+    def update(self) -> bool:
+        ''' 
+        Reads in the quaternion from the IMU. Returns True if a new valid
+        sample is available. 
+        '''
+        # Read in the new raw samples
+        timestamp, accel, gyro = self.read_raw_data()
+        if gyro is None or accel is None:
+            return False  # Failed to get sensor values
+
+        # Check calibration status. If not calibrated, start calibration
+        if not self.gyro_calibrated:
+            if not self.estimate_gyro_calibration():
+                return False
+        # NOTE: Ignoring accelerometer calibration for now
+
+        # Apply calibration
+        gyro = self.apply_gyro_calibration(gyro)
+
+        # Check outliers
+        # TODO
+
+        # Determine if moving
+        # TODO
+
+        # Valid sample obtained
+        self.timestamp = timestamp
+        self.gyro = gyro  # Gyroscope data in rad/s
+        self.accel = accel  # Accelerometer data in m/s^2
+        self.outdated_data = False
+
+        # Construct quaternion
+        # TODO
+
+        return True # New sample available
+
+    def read_from_imu(self):
+        timestamp = time.time()
+        accel = np.array(self.sensor.acceleration)  # Acceleration in m/s^2
+        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
+
+        if accel[0] is None:
+            logger.warning("IMU: Failed to get accelerometer values")
+            accel = None
+            
+        if gyro[0] is None:
+            logger.warning("IMU: Failed to get gyro values")
+            gyro = None
+        
+        return timestamp, accel, gyro
+
+    def estimate_gyro_calibration(self) -> bool:
+        """ 
+        Determine the gyroscope offset by averaging over multipe samples while
+        the IMU is stationary.
+        """
+        # TODO
+        self.gyro_offsets = [0.0, 0.0, 0.0]
+        self.gyro_calibrated = True
+        logger.info("Gyro calibrated")
+        return True
+
+    def apply_gyro_calibration(self, gyro: np.ndarray):
+        if self.gyro_calibrated and gyro is not None:
+            return gyro - self.gyro_offsets
         else:
-            # no flip
-            self._flip_count = 0
+            return None
+        
+    def sleep_until_next_sample(self):
+        ''' Sleep for the remaining time in the sampling period '''
+        sleep_time = self.imu_sample_period - (time.time() - self.last_sample_time)
+        if sleep_time > 0:
+            time.sleep(min(sleep_time, MAX_SLEEP_TIME))
 
-        # avg_quat is the latest quaternion measurement, not the average
-        self.avg_quat = quat
-        # Write over the quat_hisotry queue FIFO:
-        if len(self.quat_history) == QUEUE_LEN:
-            self.quat_history = self.quat_history[1:]
-        self.quat_history.append(quat)
-
-        if self.__moving:
-            if self.__reading_diff < self.__moving_threshold[1]:
-                self.__moving = False
-        else:
-            if self.__reading_diff > self.__moving_threshold[0]:
-                self.__moving = True
 
     def __str__(self):
         return (
@@ -136,13 +194,35 @@ class Imu:
             f"Calibration Status: {self.calibration}\n"
             f"Quaternion History: {self.quat_history}\n"
             f"Average Quaternion: {self.avg_quat}\n"
-            f"Moving: {self.moving()}\n"
+            f"Moving: {self.moving}\n"
             f"Reading Difference: {self.__reading_diff}\n"
             f"Flip Count: {self._flip_count}\n"
             f"Last Sample Time: {self.last_sample_time}\n"
             f"IMU Sample Frequency: {self.imu_sample_frequency}\n"
             f"Moving Threshold: {self.__moving_threshold}\n"
         )
+
+
+class gyro_calibration:
+    """ 
+    Calibrate the gyro by storing N measurements while stationary and taking
+    the average.
+    """
+
+    def __init__(self):
+        pass
+
+    def start(self):
+        """
+        Start the gyro calibration. Flush the buffer.
+        """
+        pass
+
+    def buffer_measurement(self):
+        pass
+
+    def estimate_offsets(self):
+        pass
 
 
 def imu_monitor(shared_state, console_queue, log_queue):
@@ -178,7 +258,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
         imu_data["status"] = imu.calibration
 
         # TODO: move_start and move_end don't seem to be used?
-        if imu.moving():
+        if imu.moving:
             if not imu_data["moving"]:
                 logger.debug("IMU: move start")
                 imu_data["moving"] = True
