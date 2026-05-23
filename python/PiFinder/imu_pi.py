@@ -28,13 +28,16 @@ class Imu:
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
     N_GYRO_CAL_SAMPLES = 150
 
-    def __init__(self):
-        self.sensor = self.configure_imu_bno055()
-
-        self.__moving = False
+    def __init__(self, accel_enabled=False):
+        self.accel_enabled = accel_enabled
+        if accel_enabled:
+            # Accelerometer disabled by default but included for development
+            self.sensor = configure_imu_bno055_accgyro_mode()
+        else:
+            self.sensor = self.configure_imu_bno055_gyro_mode()
 
         # Sampling frequency
-        self.imu_sample_frequency = 1 / 30
+        self.imu_sample_frequency = 1 / 30  # Should be > 2 * sensor bandwidth
         self.imu_sample_period = 1 / self.imu_sample_frequency
 
         # IMU data
@@ -48,11 +51,12 @@ class Imu:
 
         # Calibration
         self.gyro_calibrated = False
-        #self.accel_calibrated = False
+        self.accel_calibrated = False
         self.gyro_offsets = None
 
         # Internal states
         self.moving = False
+        self.__moving = False
 
         # First value is delta to exceed between samples to start moving,
         # second is threshold to fall below to stop moving.
@@ -60,20 +64,39 @@ class Imu:
         #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
         self.moving_thresholds = (0.5, 0.3)
 
-    def configure_imu_bno055(self):
+    @staticmethod
+    def configure_imu_bno055_accgyro_mode():
         """
         Configure the IMU.
+        """
+        i2c = board.I2C()
+        sensor = adafruit_bno055.BNO055_I2C(i2c)
+        # ACCGYRO mode: Accelerometer + Gyro data only, no fusion
+        sensor.mode = adafruit_bno055.ACCGYRO_MODE
+        sensor = self.configure_gyro(sensor)
+        sensor = self.configure_accelerometer(sensor)
 
-        Accelerometer:
+        logger.info("IMU: Configured in ACCGYRO mode")
+        return sensor
 
-        Accelerometer range options:
-        ACCEL_2G, ACCEL_4G, ACCEL_8G, ACCEL_16G
+    @staticmethod
+    def configure_imu_bno055_gyro_mode():
+        """
+        Configure the IMU.
+        """
+        i2c = board.I2C()
+        sensor = adafruit_bno055.BNO055_I2C(i2c)
+        # ACCGYRO mode: Accelerometer + Gyro data only, no fusion
+        sensor.mode = adafruit_bno055.GYROONLY_MODE
+        sensor = self.configure_gyro(sensor)
 
-        Bandwidth options:
-        ACCEL_7_81HZ, ACCEL_15_63HZ, ACCEL_31_25HZ, ACCEL_62_5HZ,
-        ACCEL_125HZ, ACCEL_250HZ, ACCEL_500HZ, ACCEL_1000HZ
+        logger.info("IMU: Configured in GYROONLY mode")
+        return sensor
 
-        Gyro::
+    @staticmethod
+    def configure_gyro(sensor):
+        """
+        Configure the gyro sensitivity (range) and bandwidth.
 
         Gyro range options:
         GYRO_2000_DPS, GYRO_1000_DPS, GYRO_500_DPS, GYRO_250_DPS, GYRO_125_DPS
@@ -82,23 +105,32 @@ class Imu:
         GYRO_523HZ, GYRO_230HZ, GYRO_116HZ, GYRO_47HZ, GYRO_23HZ, GYRO_12HZ
         GYRO_64HZ, GYRO_32HZ
         """
-        i2c = board.I2C()
-        sensor = adafruit_bno055.BNO055_I2C(i2c)
-        # ACCGYRO mode: Accelerometer + Gyro data only, no fusion
-        sensor.mode = adafruit_bno055.ACCGYRO_MODE
-
         # Configure accelerometer: Range +/-4G, Bandwidth 7.81Hz
         sensor.accel_range = adafruit_bno055.ACCEL_4G
         sensor.accel_bandwidth = adafruit_bno055.ACCEL_7_81HZ
+        logger.info("IMU: Cofigured accelerometer range and bandwidth")
+        return sensor
+    
+    @staticmethod
+    def configure_accelerometer(sensor):
+        """
+        Configure the accelerometer sensitivity (range) and bandwidth.
 
+        Accelerometer range options:
+        ACCEL_2G, ACCEL_4G, ACCEL_8G, ACCEL_16G
+
+        Bandwidth options:
+        ACCEL_7_81HZ, ACCEL_15_63HZ, ACCEL_31_25HZ, ACCEL_62_5HZ,
+        ACCEL_125HZ, ACCEL_250HZ, ACCEL_500HZ, ACCEL_1000HZ
+        """
         # Configure gyro: Range +/-500 dps, Bandwidth 12Hz
         sensor.gyro_range = adafruit_bno055.GYRO_500_DPS
         sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
-
+        logger.info("IMU: Cofigured gyro range and bandwidth")
         return sensor
 
     def read_raw_data(self):
-        """ 
+        """
         Reads in the data from the IMU and returns the raw, uncalibrated
         data.
         """
@@ -107,12 +139,41 @@ class Imu:
             self.sleep_until_next_sample()
 
         # Read in the new sample
+        if self.accel_enabled:
+            timestamp, accel, gyro = self.read_accel_gyro_from_imu()
+        else:
+            timestamp, gyro = self.read_gyro_from_imu()
+
         self.outdated_data = True
-        timestamp, accel, gyro = self.read_from_imu()
         self.last_sample_time = timestamp
 
         return timestamp, accel, gyro
 
+    def read_gyro_from_imu(self):
+        timestamp = time.time()
+        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
+
+        if gyro[0] is None:
+            logger.warning("IMU: Failed to get gyro values")
+            gyro = None
+        
+        return timestamp, gyro
+    
+    def read_accel_gyro_from_imu(self):
+        timestamp = time.time()
+        accel = np.array(self.sensor.acceleration)  # Acceleration in m/s^2
+        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
+
+        if accel[0] is None:
+            logger.warning("IMU: Failed to get accelerometer values")
+            accel = None
+            
+        if gyro[0] is None:
+            logger.warning("IMU: Failed to get gyro values")
+            gyro = None
+        
+        return timestamp, accel, gyro
+    
     def update(self) -> bool:
         ''' 
         Reads in the quaternion from the IMU. Returns True if a new valid
@@ -148,21 +209,6 @@ class Imu:
         # TODO
 
         return True # New sample available
-
-    def read_from_imu(self):
-        timestamp = time.time()
-        accel = np.array(self.sensor.acceleration)  # Acceleration in m/s^2
-        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
-
-        if accel[0] is None:
-            logger.warning("IMU: Failed to get accelerometer values")
-            accel = None
-            
-        if gyro[0] is None:
-            logger.warning("IMU: Failed to get gyro values")
-            gyro = None
-        
-        return timestamp, accel, gyro
 
     def estimate_gyro_calibration(self) -> bool:
         """ 
