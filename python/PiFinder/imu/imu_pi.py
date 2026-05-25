@@ -181,15 +181,18 @@ class Imu:
         self._moving = self._evaluate_moving_status(gyro)
 
         # Construct quaternion
-        if prev_quat is None:
-            # TODO: Additional checks when prev_quat is None. E.g. Need to plate solve to sync
-            prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
+        if self._prev_quat is None:
+            # TODO: Additional checks when _prev_quat is None. E.g. Need to plate solve to sync
+            self._prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
         quat = angular_velocity_to_quaternion(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
 
+        assert isinstance(timestamp, float)
+        self.imu_data.set(timestamp=timestamp, accel=accel, gyro=gyro, quat=quat)
+        #self.imu_data.set(timestamp, accel, gyro, quat)
+        
         # Valid sample obtained: Update current imu_data:
         self._prev_data_timestamp = self.imu_data.timestamp
         self._prev_quat = self.imu_data.quat
-        self.imu_data.set(timestamp=timestamp, accel=accel, gyro=gyro, quat=quat)
 
         return True # New sample available
 
@@ -220,7 +223,7 @@ class ImuRawData:
     gyro: NdarrayNone = None  # Gyroscope data in rad/s
     quat: quaternion.quaternion = None  # Quaternion relative to arbitrary reference (w, x, y, z)
 
-    def set(timestamp: float, accel: NdarrayNone, gyro: NdarrayNone, quat: QuaternionNone):
+    def set(self, timestamp: float, accel: NdarrayNone, gyro: NdarrayNone, quat: QuaternionNone):
         self.timestamp = timestamp
         self.accel = accel
         self.gyro = gyro
