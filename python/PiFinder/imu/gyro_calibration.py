@@ -29,8 +29,11 @@ class GyroCalibration:
         return True
 
     def apply(self, gyro: np.ndarray):
-        if self.valid and gyro is not None:
-            return gyro - self.offsets
+        if gyro is None:
+            return None  # Invalid input
+        elif not self.valid:
+            return None  # Not calibrated
         else:
-            return None
-
+            assert isinstance(self.offsets, np.ndarray)
+            assert isinstance(gyro, np.ndarray)
+            return gyro - self.offsets

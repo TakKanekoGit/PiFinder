@@ -24,11 +24,13 @@ class ImuSensorEmulator:
         self.emulate_acceleration = emulate_acceleration
         self.emulate_gyro = emulate_gyro
 
+    @property
     def acceleration(self) -> list[float]:
         """ Returns emulated acceleration values in m/s2 """
         assert self.emulate_acceleration, "Acceleration not emulated"
         return [0.0, 0.0, 9.8]  # [a_x, a_y, a_z]
 
+    @property
     def gyro(self) -> list[float]:
         """ Returns emulated gyro values in rad/s """
         assert self.emulate_gyro, "Gyro not emulated"

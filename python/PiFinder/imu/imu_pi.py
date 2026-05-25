@@ -109,26 +109,29 @@ class Imu:
 
     def _read_gyro_from_imu(self) -> tuple[float, NdarrayNone]:
         timestamp = time.time()
-        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
-
+        gyro = self.sensor.gyro  # Gyroscope in rad/s
+        
         if gyro is None:
             logger.warning("IMU: Failed to get gyro values")
             gyro = None
+        elif isinstance(gyro, list):
+            gyro = np.array(gyro)
+        else:
+            raise ValueError("Unexpected gyro type: " + type(gyro))
         
         return timestamp, gyro
     
     def _read_accel_gyro_from_imu(self) -> tuple[float, NdarrayNone, NdarrayNone]:
-        timestamp = time.time()
-        accel = np.array(self.sensor.acceleration)  # Acceleration in m/s^2
-        gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
+        accel = self.sensor.acceleration  # Acceleration in m/s^2
+        timestamp, gyro = self._read_gyro_from_imu()  # Gyroscope in rad/s
 
         if accel is None:
             logger.warning("IMU: Failed to get accelerometer values")
             accel = None
-            
-        if gyro is None:
-            logger.warning("IMU: Failed to get gyro values")
-            gyro = None
+        elif isinstance(accel, list):
+            accel = np.array(accel)
+        else:
+            raise ValueError("Unexpected accel type: " + type(accel))   
         
         return timestamp, accel, gyro
 
@@ -163,7 +166,7 @@ class Imu:
         if not self.gyro_calibration.valid:
             # Start calibration
             if self.gyro_calibration.estimate():
-                logger.info("Gyro calibrated")
+                logger.info(f"Gyro calibrated. Offsets = {self.gyro_calibration.offsets}")
             else:
                 logger.info("Gyro calibration failed")
                 return False  # Calibration failed
