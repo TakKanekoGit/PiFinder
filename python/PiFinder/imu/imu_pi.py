@@ -74,10 +74,10 @@ class Imu:
         mode on non-Raspberry Pi HW.
         """
         if emulate:
-            from PiFinder.imu_sensor_emulator import configure_imu_sensor_emulator
+            from python.PiFinder.imu.imu_sensor_emulator import configure_imu_sensor_emulator
             sensor = configure_imu_sensor_emulator(enable_accel)
         else:
-            from PiFinder.imu_sensor_bno055 import configure_imu_sensor_bno055
+            from python.PiFinder.imu.imu_sensor_bno055 import configure_imu_sensor_bno055
             sensor = configure_imu_sensor_bno055(enable_accel)
 
         return sensor
@@ -305,7 +305,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
         logger.error("Falling back to fake IMU")
         console_queue.put("IMU: Error starting physical IMU, using fake IMU")
         console_queue.put("DEGRADED_OPS IMU")
-        from PiFinder.imu_fake import Imu as ImuFake
+        from python.PiFinder.imu.imu_fake import Imu as ImuFake
 
         imu = ImuFake()
 
