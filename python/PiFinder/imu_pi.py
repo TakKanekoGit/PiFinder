@@ -28,6 +28,8 @@ class Imu:
     Previous version modified the IMU axes but the IMU now outputs the
     measurements using its native axes and the transformation from the IMU
     axes to the camera frame is done by the IMU dead-reckonig functionality.
+    
+    NOTE: Not all accelerometer features available but included for development
     """
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
     N_GYRO_CAL_SAMPLES = 150
@@ -35,12 +37,17 @@ class Imu:
     sensor: adafruit_bno055.BNO055_I2C
 
 
-    def __init__(self, enable_accel=False):
+    def __init__(self, enable_accel: bool = False, emulate: bool = False):
         if enable_accel:
-            # Not all accelerometer features available but included for development
-            self.sensor = configure_imu_bno055_accgyro_mode()
+            if emulate:
+                self.sensor = self._configure_accgyro_emulation_mode()
+            else:
+                self.sensor = configure_imu_bno055_accgyro_mode()
         else:
-            self.sensor = self._configure_imu_bno055_gyro_mode()
+            if emulate:
+                raise NotImplementedError()
+            else:
+                self.sensor = self._configure_imu_bno055_gyro_mode()
         self.accel_enabled = enable_accel
 
         # Sampling frequency
@@ -185,47 +192,6 @@ class Imu:
         
         return timestamp, accel, gyro
     
-    def update(self) -> bool:
-        ''' 
-        Reads in the quaternion from the IMU. Returns True if a new valid
-        sample is available. 
-
-        NOTE: Currently ignores accelerometer data
-        '''
-        # Read in the new raw samples
-        timestamp, _, gyro = self._read_raw_data()
-        if gyro is None:
-            return False  # Failed to get sensor values
-
-        # Check validity of timestamp
-        if timestamp <= self._prev_data_timestamp:
-            logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
-            return False
-
-        # Check calibration status. If not calibrated, start calibration
-        if not self.gyro_calibrated:
-            if not self._estimate_gyro_calibration():
-                return False
-        # Apply calibration
-        gyro = self._apply_gyro_calibration(gyro)
-
-        # Check if the new data is an outlier or has hit the range limits
-        if not self._check_valid_data(gyro):
-            return False
-
-        # Determine if moving
-        self._moving = self._evaluate_moving_status(gyro)
-
-        # Construct quaternion
-        quat = integrate_gyro_to_quat(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
-
-        # Valid sample obtained: Update current imu_data:
-        self._prev_data_timestamp = self.imu_data.timestamp
-        self._prev_quat = self.imu_data.quat
-        self.imu_data.set(timestamp=timestamp, accel=None, gyro=gyro, quat=quat)
-
-        return True # New sample available
-
     def _estimate_gyro_calibration(self) -> bool:
         """ 
         Determine the gyroscope offset by averaging over multipe samples while
@@ -253,6 +219,49 @@ class Imu:
     def _evaluate_moving_status(self, gyro: np.ndarray):
         """ TODO """
         return False
+
+    def update(self) -> bool:
+        ''' 
+        Reads in the quaternion from the IMU. Returns True if a new valid
+        sample is available. 
+        '''
+        # Read in the new raw samples
+        timestamp, accel, gyro = self._read_raw_data()
+        if gyro is None:
+            return False  # Failed to get sensor values
+
+        # Check validity of timestamp
+        if timestamp <= self._prev_data_timestamp:
+            logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
+            return False
+
+        # Check calibration status. If not calibrated, start calibration
+        # NOTE: Accelerometer data is not calibrated
+        if not self.gyro_calibrated:
+            if not self._estimate_gyro_calibration():
+                return False
+        # Apply calibration
+        gyro = self._apply_gyro_calibration(gyro)
+
+        # Check if the new data is an outlier or has hit the range limits
+        if not self._check_valid_data(gyro):
+            return False
+
+        # Determine if moving
+        self._moving = self._evaluate_moving_status(gyro)
+
+        # Construct quaternion
+        if prev_quat is None:
+            # TODO: Additional checks when prev_quat is None. E.g. Need to plate solve to sync
+            prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
+        quat = gyro_to_quaternion(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
+
+        # Valid sample obtained: Update current imu_data:
+        self._prev_data_timestamp = self.imu_data.timestamp
+        self._prev_quat = self.imu_data.quat
+        self.imu_data.set(timestamp=timestamp, accel=accel, gyro=gyro, quat=quat)
+
+        return True # New sample available
 
     def __str__(self):
         return (
@@ -285,11 +294,11 @@ class ImuData:
         self.quat = quat
 
 
-def integrate_gyro_to_quat(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
-                           timestamp: float,  # Timestamp [s] of gyro measurement
-                           prev_quat: QuaternionNone,  # Previous quaternion
-                           prev_timestamp: float,  # Timestamp [s] of prev_quat
-                           ) -> QuaternionNone:
+def gyro_to_quaternion(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
+                        timestamp: float,  # Timestamp [s] of gyro measurement
+                        prev_quat: QuaternionNone,  # Previous quaternion
+                        prev_timestamp: float,  # Timestamp [s] of prev_quat
+                        ) -> QuaternionNone:
     """
     Integrate gyro measurements into orientation quaternions relative to the
     previous quaternion.
@@ -298,7 +307,7 @@ def integrate_gyro_to_quat(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
 
     # Check inputs:
     if prev_quat is None:
-        prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
+        return None
 
     dt = timestamp - prev_timestamp
     if dt <= 0:
@@ -315,9 +324,27 @@ def integrate_gyro_to_quat(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
     axis = omega / omega_norm  # Rotation axis
     half_theta = 0.5 * theta
     dq = quaternion.quaternion(np.cos(half_theta), *(axis * np.sin(half_theta)))
-    q = (q * dq).normalized()  # Apply incremental rotation
+    quat = (q * dq).normalized()  # Apply incremental rotation
 
-    return quats
+    return quat
+
+class ImuSensorEmulator(self):
+    """ 
+    Emulates the IMU. Imu() can call this class by:
+    
+    imu = Imu()
+    imu.sensor = ImuSensorEmulator()
+    """
+
+    def __init__(self):
+        pass
+
+    def acceleration(self) -> list[float]:
+        return [0.0, 0.0, 0.0]
+
+    def gyro(self) -> list[float]:
+        return [0.0, 0.0, 0.0]
+
 
 class GyroCalibration:
     """ 
