@@ -1011,7 +1011,7 @@ if __name__ == "__main__":
         from rpi_hardware_pwm import HardwarePWM
 
         cfg = config.Config()
-        imu = importlib.import_module("PiFinder.imu_pi")
+        imu = importlib.import_module("PiFinder.imu.imu_pi")
         integrator = importlib.import_module("PiFinder.integrator")
 
         # verify and sync GPSD baud rate
