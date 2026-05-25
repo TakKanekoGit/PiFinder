@@ -1,9 +1,21 @@
 """
 IMU Sensor Emulator
 """
-
 import numpy as np
+import time
+import logging
 
+logger = logging.getLogger("imu_bno055")
+
+def configure_imu_sensor_emulator(enable_accel: bool):
+    logger.info("IMU: Starting IMU in emulation mode")
+
+    if enable_accel:
+        sensor = ImuSensorEmulator()
+    else:
+        raise NotImplementedError("Gyro emulation not implemented")
+
+    return sensor
 
 class ImuSensorEmulator(self):
     """ 
