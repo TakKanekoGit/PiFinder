@@ -140,7 +140,7 @@ class Imu:
         the IMU is stationary.
         """
         # TODO: Use GyroCalibration class
-        self.gyro_offsets = [0.0, 0.0, 0.0]
+        self.gyro_offsets = np.array([0.0, 0.0, 0.0])
         self.gyro_calibrated = True
         logger.info("Gyro calibrated")
         return True
@@ -180,8 +180,9 @@ class Imu:
         # Check calibration status. If not calibrated, start calibration
         # NOTE: Accelerometer data is not calibrated
         if not self.gyro_calibrated:
+            # Start calibration
             if not self._estimate_gyro_calibration():
-                return False
+                return False  # Calibration failed
         # Apply calibration
         gyro = self._apply_gyro_calibration(gyro)
 

@@ -34,3 +34,8 @@ def test_read_raw_data(setup_imu):
     assert isinstance(timestamp, float)
     assert isinstance(accel, np.ndarray) and accel is not None
     assert isinstance(gyro, np.ndarray) and gyro is not None
+
+def test_update(setup_imu):
+    # Test the update method
+    assert setup_imu.update() is True
+    
