@@ -586,6 +586,7 @@ pifinder_menu = {
                             "class": UITextMenu,
                             "select": "single",
                             "config_option": "keypad_brightness",
+                            "post_callback": callbacks.apply_brightness,
                             "items": [
                                 {
                                     "name": "-4",
@@ -1082,23 +1083,23 @@ pifinder_menu = {
                     "post_callback": callbacks.restart_pifinder,
                     "items": [
                         {
-                            "name": _("Off"),
+                            "name": _("Off"), # TRANSLATORS: IMU sensitivity setting
                             "value": 100,
                         },
                         {
-                            "name": _("Very Low"),
+                            "name": _("Very Low"), # TRANSLATORS: IMU sensitivity setting
                             "value": 3,
                         },
                         {
-                            "name": _("Low"),
+                            "name": _("Low"), # TRANSLATORS: IMU sensitivity setting
                             "value": 2,
                         },
                         {
-                            "name": _("Medium"),
+                            "name": _("Medium"), # TRANSLATORS: IMU sensitivity setting
                             "value": 1,
                         },
                         {
-                            "name": _("High"),
+                            "name": _("High"), # TRANSLATORS: IMU sensitivity setting
                             "value": 0.5,
                         },
                     ],
