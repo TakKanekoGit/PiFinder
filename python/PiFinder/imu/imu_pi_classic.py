@@ -156,7 +156,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
         logger.error("Falling back to fake IMU")
         console_queue.put("IMU: Error starting physical IMU, using fake IMU")
         console_queue.put("DEGRADED_OPS IMU")
-        from python.PiFinder.imu.imu_fake import Imu as ImuFake
+        from PiFinder.imu.imu_fake import Imu as ImuFake
 
         imu = ImuFake()
 

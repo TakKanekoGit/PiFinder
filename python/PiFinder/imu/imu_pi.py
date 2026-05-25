@@ -4,6 +4,7 @@
 This module is for IMU related functions
 
 """
+from dataclasses import dataclass
 import logging
 import quaternion  # Numpy quaternion
 import numpy as np
@@ -74,15 +75,15 @@ class Imu:
         mode on non-Raspberry Pi HW.
         """
         if emulate:
-            from python.PiFinder.imu.imu_sensor_emulator import configure_imu_sensor_emulator
+            from PiFinder.imu.imu_sensor_emulator import configure_imu_sensor_emulator
             sensor = configure_imu_sensor_emulator(enable_accel)
         else:
-            from python.PiFinder.imu.imu_sensor_bno055 import configure_imu_sensor_bno055
+            from PiFinder.imu.imu_sensor_bno055 import configure_imu_sensor_bno055
             sensor = configure_imu_sensor_bno055(enable_accel)
 
         return sensor
 
-    def _read_raw_data(self) -> Tuple[float, NdarrayNone, NdarrayNone]:
+    def _read_raw_data(self) -> tuple[float, NdarrayNone, NdarrayNone]:
         """
         Reads in the data from the IMU and returns the raw, uncalibrated
         data.
@@ -106,28 +107,28 @@ class Imu:
         ''' Sleep for the remaining time in the sampling period '''
         sleep_time = self.imu_sample_period - (time.time() - self.last_read_time)
         if sleep_time > 0:
-            time.sleep(min(sleep_time, MAX_SLEEP_TIME))
+            time.sleep(min(sleep_time, self.MAX_SLEEP_TIME))
 
-    def _read_gyro_from_imu(self) -> Tuple[float, NdarrayNone]:
+    def _read_gyro_from_imu(self) -> tuple[float, NdarrayNone]:
         timestamp = time.time()
         gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
 
-        if gyro[0] is None:
+        if gyro is None:
             logger.warning("IMU: Failed to get gyro values")
             gyro = None
         
         return timestamp, gyro
     
-    def _read_accel_gyro_from_imu(self) -> Tuple[float, NdarrayNone, NdarrayNone]:
+    def _read_accel_gyro_from_imu(self) -> tuple[float, NdarrayNone, NdarrayNone]:
         timestamp = time.time()
         accel = np.array(self.sensor.acceleration)  # Acceleration in m/s^2
         gyro = np.array(self.sensor.gyro)  # Gyroscope in rad/s
 
-        if accel[0] is None:
+        if accel is None:
             logger.warning("IMU: Failed to get accelerometer values")
             accel = None
             
-        if gyro[0] is None:
+        if gyro is None:
             logger.warning("IMU: Failed to get gyro values")
             gyro = None
         
@@ -138,7 +139,7 @@ class Imu:
         Determine the gyroscope offset by averaging over multipe samples while
         the IMU is stationary.
         """
-        # TODO: Use GyroCalibration
+        # TODO: Use GyroCalibration class
         self.gyro_offsets = [0.0, 0.0, 0.0]
         self.gyro_calibrated = True
         logger.info("Gyro calibrated")
@@ -195,7 +196,7 @@ class Imu:
         if prev_quat is None:
             # TODO: Additional checks when prev_quat is None. E.g. Need to plate solve to sync
             prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
-        quat = gyro_to_quaternion(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
+        quat = angular_velocity_to_quaternion(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
 
         # Valid sample obtained: Update current imu_data:
         self._prev_data_timestamp = self.imu_data.timestamp
@@ -227,7 +228,7 @@ class ImuRawData:
     Data class for the raw data from the IMU
     """
     timestamp: Union[float, None] = None  # [s]
-    accel: ndarray = None  # Accelerometer data in m/s^2
+    accel: np.ndarray = None  # Accelerometer data in m/s^2
     gyro: NdarrayNone = None  # Gyroscope data in rad/s
     quat: quaternion.quaternion = None  # Quaternion relative to arbitrary reference (w, x, y, z)
 
@@ -238,14 +239,15 @@ class ImuRawData:
         self.quat = quat
 
 
-def gyro_to_quaternion(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
-                        timestamp: float,  # Timestamp [s] of gyro measurement
-                        prev_quat: QuaternionNone,  # Previous quaternion
-                        prev_timestamp: float,  # Timestamp [s] of prev_quat
-                        ) -> QuaternionNone:
+def angular_velocity_to_quaternion(
+        ang_vel: Union[np.ndarray, list],  # Angular velocity [rad/s]
+        timestamp: float,  # Timestamp [s] of gyro measurement
+        prev_quat: QuaternionNone,  # Previous quaternion
+        prev_timestamp: float,  # Timestamp [s] of prev_quat
+        ) -> QuaternionNone:
     """
-    Integrate gyro measurements into orientation quaternions relative to the
-    previous quaternion.
+    Integrate angular velocity measurements from the gyro into orientation
+    quaternions relative to the previous quaternion.
     """
     MIN_OMEGA = 1E-12  # [rad/s] Minimum angular velocity (numerical noise)
 
@@ -258,7 +260,7 @@ def gyro_to_quaternion(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
         logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
         return None
 
-    omega = np.array(gyro)
+    omega = np.array(ang_vel)
     omega_norm = np.linalg.norm(omega)
     if omega_norm < MIN_OMEGA:
         return prev_quat.copy()  # No rotation (just numerical noise)
@@ -305,7 +307,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
         logger.error("Falling back to fake IMU")
         console_queue.put("IMU: Error starting physical IMU, using fake IMU")
         console_queue.put("DEGRADED_OPS IMU")
-        from python.PiFinder.imu.imu_fake import Imu as ImuFake
+        from PiFinder.imu.imu_fake import Imu as ImuFake
 
         imu = ImuFake()
 

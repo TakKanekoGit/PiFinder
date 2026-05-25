@@ -1,7 +1,6 @@
 """ 
 Configures the BNO055 IMU sensor 
 """
-
 import board
 import adafruit_bno055
 import logging
@@ -18,7 +17,6 @@ def configure_imu_sensor_bno055(enable_accel: bool):
         sensor = _configure_imu_accgyro_mode(sensor)
     else:
         sensor = _configure_imu_gyro_mode(sensor)
-
     return sensor
 
 
