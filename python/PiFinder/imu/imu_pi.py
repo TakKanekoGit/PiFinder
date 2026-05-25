@@ -13,6 +13,7 @@ import time
 
 from PiFinder import config
 from PiFinder.multiproclogging import MultiprocLogging
+from PiFinder.imu.gyro_calibration import GyroCalibration
 
 logger = logging.getLogger("IMU.pi")
 
@@ -34,8 +35,7 @@ class Imu:
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
     N_GYRO_CAL_SAMPLES = 150
 
-    #sensor: adafruit_bno055.BNO055_I2C
-
+    gyro_calibration: GyroCalibration
 
     def __init__(self, enable_accel: bool = False, emulate: bool = False):
         self.sensor = self._init_sensor(enable_accel=enable_accel, emulate=emulate)
@@ -51,9 +51,7 @@ class Imu:
         self.last_read_time = time.time()  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
 
         # Calibration
-        self.gyro_calibrated = False
-        self.accel_calibrated = False
-        self.gyro_offsets = None
+        self.gyro_calibration = GyroCalibration()
 
         # Internal states
         self.moving = False
@@ -133,23 +131,6 @@ class Imu:
             gyro = None
         
         return timestamp, accel, gyro
-    
-    def _estimate_gyro_calibration(self) -> bool:
-        """ 
-        Determine the gyroscope offset by averaging over multipe samples while
-        the IMU is stationary.
-        """
-        # TODO: Use GyroCalibration class
-        self.gyro_offsets = np.array([0.0, 0.0, 0.0])
-        self.gyro_calibrated = True
-        logger.info("Gyro calibrated")
-        return True
-
-    def _apply_gyro_calibration(self, gyro: np.ndarray):
-        if self.gyro_calibrated and gyro is not None:
-            return gyro - self.gyro_offsets
-        else:
-            return None
 
     def _check_valid_data(self, gyro: np.ndarray):
         """ 
@@ -179,12 +160,15 @@ class Imu:
 
         # Check calibration status. If not calibrated, start calibration
         # NOTE: Accelerometer data is not calibrated
-        if not self.gyro_calibrated:
+        if not self.gyro_calibration.valid:
             # Start calibration
-            if not self._estimate_gyro_calibration():
+            if self.gyro_calibration.estimate():
+                logger.info("Gyro calibrated")
+            else:
+                logger.info("Gyro calibration failed")
                 return False  # Calibration failed
         # Apply calibration
-        gyro = self._apply_gyro_calibration(gyro)
+        gyro = self.gyro_calibration.apply(gyro)
 
         # Check if the new data is an outlier or has hit the range limits
         if not self._check_valid_data(gyro):
@@ -212,7 +196,7 @@ class Imu:
             f"Gyro data: ", self.gyro, "\n"
             f"Last Sample Time: {self.last_read_time}\n"
             f"Gyro calibration Status: {self.gyro_calibrated}\n"
-            f"Gyro offsets: {self.gyro_offsets}\n"
+            #f"Gyro offsets: {self.gyro_offsets}\n"
             #f"Quaternion History: {self.quat_history}\n"
             #f"Average Quaternion: {self.avg_quat}\n"
             f"Moving: {self.moving}\n"
@@ -274,27 +258,6 @@ def angular_velocity_to_quaternion(
     quat = (q * dq).normalized()  # Apply incremental rotation
 
     return quat
-
-class GyroCalibration:
-    """ 
-    Calibrate the gyro by storing N measurements while stationary and taking
-    the average.
-    """
-
-    def __init__(self):
-        pass
-
-    def start(self):
-        """
-        Start the gyro calibration. Flush the buffer.
-        """
-        pass
-
-    def buffer_measurement(self):
-        pass
-
-    def estimate_offsets(self):
-        pass
 
 
 def imu_monitor(shared_state, console_queue, log_queue):
