@@ -4,15 +4,17 @@
 This module is for IMU related functions
 
 """
-
-from typing import Union
-import time
-from PiFinder import config
-from PiFinder.multiproclogging import MultiprocLogging
 import board
 import adafruit_bno055
 import logging
 import quaternion  # Numpy quaternion
+import numpy as np
+from typing import Union
+import time
+
+from PiFinder import config
+from PiFinder.multiproclogging import MultiprocLogging
+
 
 logger = logging.getLogger("IMU.pi")
 
@@ -34,20 +36,11 @@ class Imu:
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
     N_GYRO_CAL_SAMPLES = 150
 
-    sensor: adafruit_bno055.BNO055_I2C
+    #sensor: adafruit_bno055.BNO055_I2C
 
 
     def __init__(self, enable_accel: bool = False, emulate: bool = False):
-        if enable_accel:
-            if emulate:
-                self.sensor = self._configure_accgyro_emulation_mode()
-            else:
-                self.sensor = configure_imu_bno055_accgyro_mode()
-        else:
-            if emulate:
-                raise NotImplementedError()
-            else:
-                self.sensor = self._configure_imu_bno055_gyro_mode()
+        self.sensor = _init_sensor(enable_accel=enable_accel, emulate=emulate)
         self.accel_enabled = enable_accel
 
         # Sampling frequency
@@ -55,7 +48,7 @@ class Imu:
         self.imu_sample_period = 1 / self.imu_sample_frequency
 
         # IMU data
-        self.imu_data = ImuData()
+        self.imu_data = ImuRawData()
 
         self.last_read_time = time.time()  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
 
@@ -75,6 +68,20 @@ class Imu:
         cfg = config.Config()
         #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
         self.moving_thresholds = (0.5, 0.3)
+
+    def _init_sensor(self, enable_accel: bool = False, emulate: bool = False):
+        if emulate:
+            if enable_accel:
+                sensor = self._configure_accgyro_emulation_mode()
+            else:
+                raise NotImplementedError()
+        else:
+            if enable_accel:
+                sensor = configure_imu_bno055_accgyro_mode()
+            else:
+                sensor = self._configure_imu_bno055_gyro_mode()
+        
+        return sensor
 
     @staticmethod
     def _configure_imu_bno055_accgyro_mode() -> adafruit_bno055.BNO055_I2C:
@@ -281,7 +288,10 @@ class Imu:
 
 
 @dataclass
-class ImuData:
+class ImuRawData:
+    """
+    Data class for the raw data from the IMU
+    """
     timestamp: Union[float, None] = None  # [s]
     accel: ndarray = None  # Accelerometer data in m/s^2
     gyro: NdarrayNone = None  # Gyroscope data in rad/s
@@ -327,24 +337,6 @@ def gyro_to_quaternion(gyro: Union[ndarray, list],  # Gyro meas [rad/s]
     quat = (q * dq).normalized()  # Apply incremental rotation
 
     return quat
-
-class ImuSensorEmulator(self):
-    """ 
-    Emulates the IMU. Imu() can call this class by:
-    
-    imu = Imu()
-    imu.sensor = ImuSensorEmulator()
-    """
-
-    def __init__(self):
-        pass
-
-    def acceleration(self) -> list[float]:
-        return [0.0, 0.0, 0.0]
-
-    def gyro(self) -> list[float]:
-        return [0.0, 0.0, 0.0]
-
 
 class GyroCalibration:
     """ 
