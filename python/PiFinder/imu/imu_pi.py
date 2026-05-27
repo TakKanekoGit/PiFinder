@@ -58,6 +58,10 @@ class ImuData:
         else:
             return np.linalg.norm(self.gyro)
 
+    def __str__(self):
+        return (f"ImuData(timestamp={self.timestamp}, accel={self.accel}, "
+                f"gyro={self.gyro}, quat={self.quat})")
+    
 
 class ImuMovingStatus:
     """
@@ -67,19 +71,22 @@ class ImuMovingStatus:
     DEFAULT_MOVING_ANG_VEL_THRESHOLDS = [np.deg2rad(1.0), np.deg2rad(1.8)]
 
     moving: bool  # Whether the IMU is moving
-    timestamp: Union[float, None]  # [s] Time when the IMU started moving
-    stationary_since: float  # [s] Time when the IMU stopped moving
+    timestamp: Union[float, None]  # [s] Timestamp of last update
+    stationary_since: Union[float, None]  # [s] Time when the IMU stopped moving
 
     _moving_ang_vel_thresholds: list[2]  # [lower, upper] ang. vel. thresholds [rad/s]
 
-    def __init__(self):
-        self.moving = False
-        self.timestamp = None
-        self.stationary_since = time.time()
-        
+    def __init__(self):        
         # Init. upper & lower hysteresis thresholds for movement detection [rad/s] 
         # TODO: Does need need to updated if cfg gets updated? 
         self.update_thresholds()
+        self.reset()
+
+    def reset(self):
+        """ Reset the moving state """
+        self.moving = False
+        self.timestamp = None
+        self.stationary_since = time.time()
 
     def update_thresholds(self):
         """ 
@@ -111,6 +118,7 @@ class ImuMovingStatus:
             else:
                 if imu_data.ang_vel > self._moving_ang_vel_thresholds[1]:
                     self.moving = True
+                    self.stationary_since = None
 
 
 class Imu:
@@ -123,7 +131,6 @@ class Imu:
     """
     IMU_SAMPLE_FREQUENCY = 1 / 30  # Should be > 2 * sensor bandwidth
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
-    N_GYRO_CAL_SAMPLES = 150
 
     accel_enabled: bool
     imu_sample_period: float
@@ -133,8 +140,8 @@ class Imu:
     # Internal states:
     moving_state: ImuMovingStatus
     _last_read_time: float  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
-    _prev_quat: QuaternionNone  # Previous quaternion state
     _prev_data_timestamp: float   # Timestamp associated with _prev_quat
+    _prev_quat: QuaternionNone  # Previous quaternion state
 
     def __init__(self, enable_accel: bool = False, emulate: bool = False):
         self.sensor = self._init_sensor(enable_accel=enable_accel, emulate=emulate)
@@ -147,9 +154,7 @@ class Imu:
 
         # Internal states
         self.moving_state = ImuMovingStatus()
-        self._last_read_time = time.time()
-        self._prev_quat = None
-        self._prev_data_timestamp = time.time()
+        self.reset_internal_states()
 
     def _init_sensor(self, enable_accel: bool = False, emulate: bool = False):
         """
@@ -166,6 +171,13 @@ class Imu:
             sensor = configure_imu_sensor_bno055(enable_accel)
 
         return sensor
+
+    def reset_internal_states(self):
+        self.moving_state.reset()
+        self._last_read_time = time.time()
+        self._prev_data_timestamp = time.time()
+        self._prev_quat = None
+        self._invalid_timestamp_counter = 0
 
     def _read_raw_data(self) -> tuple[float, NdarrayNone, NdarrayNone]:
         """
@@ -239,10 +251,16 @@ class Imu:
             return False  # Failed to get sensor values
 
         # Check validity of timestamp
-        # TODO: Deal with the case if this happens repeatedly because time has jumped
         if timestamp <= self._prev_data_timestamp:
-            logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
-            return False
+            if self._invalid_timestamp_counter < MAX_INVALID_TIMESTAMP_COUNTER:
+                logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
+                self._invalid_timestamp_counter += 1
+                return False
+            else:
+                logger.info("IMU: Previous timestamp same or older than current timestamp. Resetting timestamp.")
+                # TODO: This resets the quaternion and need to sync with solve
+                self.reset_internal_states()
+                return False
 
         # Check calibration status. If not calibrated, start calibration
         # NOTE: Accelerometer data is not calibrated
@@ -279,17 +297,12 @@ class Imu:
     def __str__(self):
         return (
             f"IMU Information:\n"
-            f"Gyro data: ", self.gyro, "\n"
-            f"Last Sample Time: {self._last_read_time}\n"
-            f"Gyro calibration Status: {self.gyro_calibrated}\n"
-            #f"Gyro offsets: {self.gyro_offsets}\n"
-            #f"Quaternion History: {self.quat_history}\n"
-            #f"Average Quaternion: {self.avg_quat}\n"
-            f"Moving: {self.moving_status.moving}\n"
-            #f"Reading Difference: {self.__reading_diff}\n"
-            #f"Flip Count: {self._flip_count}\n"
-            f"IMU Sample Frequency: {self.IMU_SAMPLE_FREQUENCY}\n"
-            #f"Moving Threshold: {self.__moving_threshold}\n"
+            f"IMU data: {self.imu_data.__str__()} \n"
+            f"accel_enabled: {self.accel_enabled}\n"
+            f"imu_sample_period: {self.imu_sample_period}\n"
+            f"_last_read_time: {self._last_read_time}\n"
+            f"_prev_data_timestamp: {self._prev_data_timestamp}\n"
+            f"_prev_quat: {self._prev_quat}\n"
         )
 
 

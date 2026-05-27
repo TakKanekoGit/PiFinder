@@ -46,18 +46,34 @@ def test_read_raw_data(setup_imu):
 def test_update(setup_imu):
     # Test the update method
     assert setup_imu.update() is True
-    
+
+def test_str(setup_imu):
+    # Test the __str__ method
+    assert isinstance(setup_imu.__str__(), str)
+
 # Test other classes
-"""
+
 def test_ImuData():
-    # Test the ImuData class
-    imu_data = ImuData()
+    # Test: ImuData
+    imu_data = ImuData(time.time())
     assert isinstance(imu_data, ImuData)
-    imu_data = ImuData(timestamp=time.time(), accel=None, gyro=None)
+    imu_data = ImuData(time.time(), accel=None, gyro=np.array([1, 2, 3]))
+    assert isinstance(imu_data, ImuData)
+    assert imu_data.gyro is not None
+    assert imu_data.ang_vel == np.linalg.norm(imu_data.gyro)
+    assert isinstance(imu_data.__str__(), str)
+
 
 def test_ImuMovingStatus():
+    # Test: ImuMovingStatus
     imu_moving_status = ImuMovingStatus()
     imu_moving_status.update_thresholds()
-    #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
-    #imu_moving_status.update(self, imu_data: ImuData)
-"""
+
+    imu_data = ImuData(time.time(), accel=None, gyro=np.array([0, 0, 0]))
+    imu_moving_status.update(imu_data)
+    assert imu_moving_status.moving is False
+
+    rad_vel = imu_moving_status._moving_ang_vel_thresholds[1]
+    imu_data = ImuData(time.time(), accel=None, gyro=np.array([rad_vel, rad_vel, rad_vel]))
+    imu_moving_status.update(imu_data)
+    assert imu_moving_status.moving is True

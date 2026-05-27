@@ -11,6 +11,8 @@ class GyroCalibration:
     Calibrate the gyro by storing N measurements while stationary and taking
     the averages.
     """
+    N_GYRO_CAL_SAMPLES = 150
+
     offsets: Union[np.ndarray, None]
     valid: bool  # Has valid calibration
 
