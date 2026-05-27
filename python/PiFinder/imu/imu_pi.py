@@ -24,6 +24,23 @@ QuaternionNone = Union[quaternion.quaternion, None]
 QUEUE_LEN = 10  # TODO: Remove?
 
 
+@dataclass
+class ImuRawData:
+    """
+    Data class for the raw data from the IMU
+    """
+    timestamp: Union[float, None] = None  # [s]
+    accel: np.ndarray = None  # Accelerometer data in m/s^2
+    gyro: NdarrayNone = None  # Gyroscope data in rad/s
+    quat: quaternion.quaternion = None  # Quaternion relative to arbitrary reference (w, x, y, z)
+
+    def set(self, timestamp: float, accel: NdarrayNone, gyro: NdarrayNone, quat: QuaternionNone):
+        self.timestamp = timestamp
+        self.accel = accel
+        self.gyro = gyro
+        self.quat = quat
+
+
 class Imu:
     """
     Previous version modified the IMU axes but the IMU now outputs the
@@ -32,38 +49,41 @@ class Imu:
     
     NOTE: Not all accelerometer features available but included for development
     """
+    IMU_SAMPLE_FREQUENCY = 1 / 30  # Should be > 2 * sensor bandwidth
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
     N_GYRO_CAL_SAMPLES = 150
+    # Default lower & upper hysteresis thresholds for movement detection [rad/s] 
+    DEFAULT_MOVING_ANG_VEL_THRESHOLDS = [np.deg2rad(1.0), np.deg2rad(1.8)]
 
+    accel_enabled: bool
+    imu_sample_period: float
+    imu_data: ImuRawData
     gyro_calibration: GyroCalibration
+    moving_ang_vel_thresholds: list[2]  # [lower, upper] ang. vel. thresholds [rad/s]
+
+    _last_read_time: float
+
 
     def __init__(self, enable_accel: bool = False, emulate: bool = False):
         self.sensor = self._init_sensor(enable_accel=enable_accel, emulate=emulate)
+        
         self.accel_enabled = enable_accel
+        self.imu_sample_period = 1 / self.IMU_SAMPLE_FREQUENCY
 
-        # Sampling frequency
-        self.imu_sample_frequency = 1 / 30  # Should be > 2 * sensor bandwidth
-        self.imu_sample_period = 1 / self.imu_sample_frequency
-
-        # IMU data
         self.imu_data = ImuRawData()
-
-        self.last_read_time = time.time()  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
 
         # Calibration
         self.gyro_calibration = GyroCalibration()
 
         # Internal states
+        self._last_read_time = time.time()  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
         self.moving = False
-        self.__moving = False
         self._prev_quat = None
         self._prev_data_timestamp = time.time()
 
-        # First value is delta to exceed between samples to start moving,
-        # second is threshold to fall below to stop moving.
-        cfg = config.Config()
-        #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
-        self.moving_thresholds = (0.5, 0.3)
+        # Upper & lower hysteresis thresholds for movement detection [rad/s] 
+        # TODO: Does need need to updated if cfg gets updated? 
+        self.moving_ang_vel_thresholds = self._get_moving_thresholds()
 
     def _init_sensor(self, enable_accel: bool = False, emulate: bool = False):
         """
@@ -81,13 +101,23 @@ class Imu:
 
         return sensor
 
+    def _get_moving_thresholds(self):
+        """ 
+        Returns moving thresholds (in rad/s) scaled by the user configuration
+        imu_threshold_scale. Returns a list of [lower, upper] thresholds for
+        hyesteresis.
+        """
+        cfg = config.Config()
+        imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
+        return [thr * imu_threshold_scale for thr in self.DEFAULT_MOVING_ANG_VEL_THRESHOLDS]
+
     def _read_raw_data(self) -> tuple[float, NdarrayNone, NdarrayNone]:
         """
         Reads in the data from the IMU and returns the raw, uncalibrated
         data.
         """
         # check for a new sample period
-        if time.time() - self.last_read_time < self.imu_sample_period:
+        if time.time() - self._last_read_time < self.imu_sample_period:
             self._sleep_until_next_sample()
 
         # Read in the new sample
@@ -97,13 +127,13 @@ class Imu:
             timestamp, gyro = self._read_gyro_from_imu()
             accel = None
 
-        self.last_read_time = timestamp  # Last time stamp when data was read from the IMU
+        self._last_read_time = timestamp  # Last time stamp when data was read from the IMU
 
         return timestamp, accel, gyro
 
     def _sleep_until_next_sample(self):
         ''' Sleep for the remaining time in the sampling period '''
-        sleep_time = self.imu_sample_period - (time.time() - self.last_read_time)
+        sleep_time = self.imu_sample_period - (time.time() - self._last_read_time)
         if sleep_time > 0:
             time.sleep(min(sleep_time, self.MAX_SLEEP_TIME))
 
@@ -142,9 +172,20 @@ class Imu:
         """
         return True  # True if no outliers
 
-    def _evaluate_moving_status(self, gyro: np.ndarray):
-        """ TODO """
-        return False
+    def _update_moving_status(self, gyro: np.ndarray):
+        """ 
+        Determine and update the moving status based on the gyro angular
+        velocity. The threshold has hysteresis for robustness and to prevent
+        oscillations.
+        """
+        if gyro is not None:
+            ang_vel = np.linalg.norm(gyro)  # [rad/s]
+            if self.moving:
+                if ang_vel < self.moving_ang_vel_thresholds[0]:
+                    self.moving = False
+            else:
+                if ang_vel > self.moving_ang_vel_thresholds[1]:
+                    self.moving = True
 
     def update(self) -> bool:
         ''' 
@@ -178,7 +219,7 @@ class Imu:
             return False
 
         # Determine if moving
-        self._moving = self._evaluate_moving_status(gyro)
+        self._update_moving_status(gyro)
 
         # Construct quaternion
         if self._prev_quat is None:
@@ -188,9 +229,8 @@ class Imu:
 
         assert isinstance(timestamp, float)
         self.imu_data.set(timestamp=timestamp, accel=accel, gyro=gyro, quat=quat)
-        #self.imu_data.set(timestamp, accel, gyro, quat)
         
-        # Valid sample obtained: Update current imu_data:
+        # Valid sample obtained: Update previous values
         self._prev_data_timestamp = self.imu_data.timestamp
         self._prev_quat = self.imu_data.quat
 
@@ -200,7 +240,7 @@ class Imu:
         return (
             f"IMU Information:\n"
             f"Gyro data: ", self.gyro, "\n"
-            f"Last Sample Time: {self.last_read_time}\n"
+            f"Last Sample Time: {self._last_read_time}\n"
             f"Gyro calibration Status: {self.gyro_calibrated}\n"
             #f"Gyro offsets: {self.gyro_offsets}\n"
             #f"Quaternion History: {self.quat_history}\n"
@@ -208,26 +248,9 @@ class Imu:
             f"Moving: {self.moving}\n"
             #f"Reading Difference: {self.__reading_diff}\n"
             #f"Flip Count: {self._flip_count}\n"
-            f"IMU Sample Frequency: {self.imu_sample_frequency}\n"
-            f"Moving Threshold: {self.__moving_threshold}\n"
+            f"IMU Sample Frequency: {self.IMU_SAMPLE_FREQUENCY}\n"
+            #f"Moving Threshold: {self.__moving_threshold}\n"
         )
-
-
-@dataclass
-class ImuRawData:
-    """
-    Data class for the raw data from the IMU
-    """
-    timestamp: Union[float, None] = None  # [s]
-    accel: np.ndarray = None  # Accelerometer data in m/s^2
-    gyro: NdarrayNone = None  # Gyroscope data in rad/s
-    quat: quaternion.quaternion = None  # Quaternion relative to arbitrary reference (w, x, y, z)
-
-    def set(self, timestamp: float, accel: NdarrayNone, gyro: NdarrayNone, quat: QuaternionNone):
-        self.timestamp = timestamp
-        self.accel = accel
-        self.gyro = gyro
-        self.quat = quat
 
 
 def angular_velocity_to_quaternion(
@@ -271,7 +294,7 @@ def imu_monitor(shared_state, console_queue, log_queue):
     logger.debug("Starting IMU")
     imu = None
     try:
-        imu = Imu()
+        imu = Imu(enable_accel=True)
     except Exception as e:
         logger.error(f"Error starting phyiscal IMU : {e}")
         logger.error("Falling back to fake IMU")
