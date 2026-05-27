@@ -12,6 +12,7 @@ import time
 
 from PiFinder.multiproclogging import MultiprocLogging
 from PiFinder.imu.imu_data import ImuData
+from PiFinder.imu.imu import Imu
 
 logger = logging.getLogger("IMU.pi")
 
@@ -22,23 +23,22 @@ QuaternionNone = Union[quaternion.quaternion, None]
 QUEUE_LEN = 10  # TODO: Remove?
 
 
-def imu_monitor(shared_state, console_queue, log_queue):
+def imu_monitor(shared_state, console_queue, log_queue, enable_accel=False):
     MultiprocLogging.configurer(log_queue)
     logger.debug("Starting IMU")
     imu = None
     try:
-        imu = Imu(enable_accel=True)
+        imu = Imu(enable_accel=enable_accel, emulate=False)
     except Exception as e:
         logger.error(f"Error starting phyiscal IMU : {e}")
         logger.error("Falling back to fake IMU")
         console_queue.put("IMU: Error starting physical IMU, using fake IMU")
         console_queue.put("DEGRADED_OPS IMU")
-        # TODO: Replace with Imu() in emulation mode
-        from PiFinder.imu.imu_fake import Imu as ImuFake
-
-        imu = ImuFake()
+        # Run Imu() in emulation mode
+        imu = Imu(enable_accel=enable_accel, emulate=True)
 
     imu_calibrated = False
+
     # TODO: Remove move_start, move_end
     imu_data = {
         "moving": False,
@@ -54,35 +54,17 @@ def imu_monitor(shared_state, console_queue, log_queue):
         # Read IMU data, check validity, apply calibration and process 
         imu.update()
         
-        imu_data["status"] = imu.calibration
+        if imu.gyro_calibration.valid:
+            # Copy data to shared state. TODO: Use a standard class?
+            imu_data["moving"] = imu.moving_status.moving
+            imu_data["quat"] = imu.imu_data.quat
+            imu_data["status"] = imu.gyro_calibration.valid
+            # TODO: move_start and move_end don't seem to be used?
+            imu_data["move_start"] = None
+            imu_data["move_end"] = None
 
-        # TODO: move_start and move_end don't seem to be used?
-        if imu.moving:
-            if not imu_data["moving"]:
-                logger.debug("IMU: move start")
-                imu_data["moving"] = True
-                imu_data["move_start"] = time.time()
-            # DISABLE old method
-            imu_data["quat"] = quaternion.from_float_array(
-                imu.avg_quat
-            )  # Scalar-first (w, x, y, z)
-        else:
-            if imu_data["moving"]:
-                # If we were moving and we now stopped
-                logger.debug("IMU: move end")
-                imu_data["moving"] = False
-                imu_data["move_end"] = time.time()
-                imu_data["quat"] = quaternion.from_float_array(
-                    imu.avg_quat
-                )  # Scalar-first (w, x, y, z)
-
-        if not imu_calibrated:
-            if imu_data["status"] == 3:
-                imu_calibrated = True
-                console_queue.put("IMU: NDOF Calibrated!")
-
-        if shared_state is not None and imu_calibrated:
-            shared_state.set_imu(imu_data)
+            if shared_state is not None:
+                shared_state.set_imu(imu_data)
 
 
 if __name__ == "__main__":

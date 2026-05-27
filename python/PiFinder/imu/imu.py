@@ -90,7 +90,7 @@ class Imu:
     gyro_calibration: GyroCalibration
 
     # Internal states:
-    moving_state: ImuMovingStatus
+    moving_status: ImuMovingStatus
     _last_read_time: float  # Last time stamp when data was read from the IMU (but not necessarily valid and stored)
     _prev_data_timestamp: float   # Timestamp associated with _prev_quat
     _prev_quat: QuaternionNone  # Previous quaternion state
@@ -105,7 +105,7 @@ class Imu:
         self.gyro_calibration = GyroCalibration()
 
         # Internal states
-        self.moving_state = ImuMovingStatus()
+        self.moving_status = ImuMovingStatus()
         self.reset_internal_states()
 
     def _init_sensor(self, enable_accel: bool = False, emulate: bool = False):
@@ -125,7 +125,7 @@ class Imu:
         return sensor
 
     def reset_internal_states(self):
-        self.moving_state.reset()
+        self.moving_status.reset()
         self._last_read_time = time.time()
         self._prev_data_timestamp = time.time()
         self._prev_quat = None
@@ -238,7 +238,7 @@ class Imu:
 
         assert isinstance(timestamp, float)
         self.imu_data.set(timestamp, accel=accel, gyro=gyro, quat=quat)
-        self.moving_state.update(self.imu_data)  # Determine if moving
+        self.moving_status.update(self.imu_data)  # Determine if moving
 
         # Valid sample obtained: Update previous values
         self._prev_data_timestamp = self.imu_data.timestamp
