@@ -167,7 +167,7 @@ class Imu:
         elif isinstance(gyro, list):
             gyro = np.array(gyro)
         else:
-            raise ValueError("Unexpected gyro type: " + type(gyro))
+            raise ValueError(f"Unexpected gyro type: {type(gyro)}")
         
         return timestamp, gyro
     
