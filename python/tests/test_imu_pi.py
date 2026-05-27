@@ -4,8 +4,12 @@ Test imu_pi.py
 
 import numpy as np
 import pytest
+import quaternion
+import time
 
-from PiFinder.imu.imu_pi import Imu
+from PiFinder.imu.imu_pi import Imu, ImuData, ImuMovingStatus, GyroCalibration
+
+# Test Imu class:
 
 @pytest.fixture(params=[True, False])
 def setup_imu(request):
@@ -43,3 +47,17 @@ def test_update(setup_imu):
     # Test the update method
     assert setup_imu.update() is True
     
+# Test other classes
+"""
+def test_ImuData():
+    # Test the ImuData class
+    imu_data = ImuData()
+    assert isinstance(imu_data, ImuData)
+    imu_data = ImuData(timestamp=time.time(), accel=None, gyro=None)
+
+def test_ImuMovingStatus():
+    imu_moving_status = ImuMovingStatus()
+    imu_moving_status.update_thresholds()
+    #imu_threshold_scale = cfg.get_option("imu_threshold_scale", 1)
+    #imu_moving_status.update(self, imu_data: ImuData)
+"""
