@@ -1,13 +1,13 @@
 """
-Test imu_pi.py
+Test imu.py and imu_data.py
 """
 
 import numpy as np
 import pytest
-import quaternion
 import time
 
-from PiFinder.imu.imu_pi import Imu, ImuData, ImuMovingStatus, GyroCalibration
+from PiFinder.imu.imu_data import ImuData
+from PiFinder.imu.imu import Imu, ImuMovingStatus
 
 # Test Imu class:
 
