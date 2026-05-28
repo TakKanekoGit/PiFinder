@@ -164,7 +164,7 @@ class Imu:
         if gyro is None:
             logger.warning("IMU: Failed to get gyro values")
             gyro = None
-        elif isinstance(gyro, list):
+        elif isinstance(gyro, tuple):
             gyro = np.array(gyro)
         else:
             raise ValueError(f"Unexpected gyro type: {type(gyro)}")
@@ -178,10 +178,10 @@ class Imu:
         if accel is None:
             logger.warning("IMU: Failed to get accelerometer values")
             accel = None
-        elif isinstance(accel, list):
+        elif isinstance(accel, tuple):
             accel = np.array(accel)
         else:
-            raise ValueError("Unexpected accel type: " + type(accel))   
+            raise ValueError(f"Unexpected accel type: {type(accel)}")   
         
         return timestamp, accel, gyro
 
