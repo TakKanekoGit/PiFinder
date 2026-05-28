@@ -81,7 +81,7 @@ class Imu:
     
     NOTE: Not all accelerometer features available but included for development
     """
-    IMU_SAMPLE_FREQUENCY = 1 / 30  # Should be > 2 * sensor bandwidth
+    IMU_SAMPLE_FREQUENCY = 30  # [Hz] Should be > 2 * sensor bandwidth
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
 
     accel_enabled: bool
@@ -220,6 +220,7 @@ class Imu:
             # Start calibration
             if self.gyro_calibration.estimate(gyro):
                 logger.info(f"Gyro calibrated. Offsets = {self.gyro_calibration.offsets}")
+                print("IMU Gyro calibrated")
             else:
                 logger.info("Gyro calibration failed")
                 return False  # Calibration failed
