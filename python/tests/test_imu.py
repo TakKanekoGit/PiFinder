@@ -9,7 +9,7 @@ import time
 from PiFinder.imu.imu_data import ImuData
 from PiFinder.imu.imu import Imu, ImuMovingStatus
 
-EMULATE = True
+EMULATE = True  # Can be set to False if testing on the PiFinder
 
 # Test Imu class:
 
