@@ -5,7 +5,10 @@ import logging
 import numpy as np
 from typing import Union
 
+from PiFinder.imu.imu_sensor_bno055 import GyroSpecs
+
 logger = logging.getLogger("GyroCalibration")
+
 
 
 class GyroCalibration:
@@ -17,10 +20,19 @@ class GyroCalibration:
 
     offsets: Union[np.ndarray, None]
     valid: bool  # Has valid calibration
+    _gyro_specs: GyroSpecs
+
+    noise_threshold: float  # Worst-case noise [rad/s]
+    stationary_threshold: float  # Threshold to deem as stationary for calibration [rad/s]
 
     def __init__(self):
         self.offsets = None
         self.valid = False
+        self._gyro_specs = GyroSpecs()
+
+        # Expected worst-case offset & noise when gyro is stationary (with safety factors)
+        self._noise_threshold = self._gyro_specs.output_noise * 4
+        self._stationary_threshold = self._gyro_specs.zero_rate_offset * 1.5 + self._noise_threshold  # Ang. vel threshold [rad/s]
 
     def reset(self):
         self.offsets = None

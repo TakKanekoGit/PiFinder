@@ -218,11 +218,12 @@ class Imu:
         # NOTE: Accelerometer data is not calibrated
         if not self.gyro_calibration.valid:
             # Start calibration
-            if self.gyro_calibration.estimate():
+            if self.gyro_calibration.estimate(gyro):
                 logger.info(f"Gyro calibrated. Offsets = {self.gyro_calibration.offsets}")
             else:
                 logger.info("Gyro calibration failed")
                 return False  # Calibration failed
+        
         # Apply calibration
         gyro = self.gyro_calibration.apply(gyro)
 

@@ -4,6 +4,8 @@ Configures the BNO055 IMU sensor
 import board
 import adafruit_bno055
 import logging
+from dataclasses import dataclass
+import numpy as np
 
 logger = logging.getLogger("imu_bno055")
 
@@ -81,3 +83,19 @@ def _configure_accelerometer(sensor: adafruit_bno055.BNO055_I2C) -> adafruit_bno
     sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
     logger.info("IMU: Cofigured gyro range and bandwidth")
     return sensor
+
+
+@dataclass
+class GyroSpecs:
+    # From the BNO055 data sheet:
+    zero_rate_offset = np.deg2rad(3.0)  # Max zero rate offset [rad/s]
+    output_noise_density = np.deg2rad(0.042)  # Max output noise density [rad/s/sqrt(Hz)]
+    
+    # Configured:
+    bandwidth = 12.0  # Bandwidth [Hz]
+
+    @property
+    def output_noise(self):
+        """ Expected output noise per sample """
+        return self.output_noise_density * np.sqrt(self.bandwidth)  # [rad/s/sqrt(Hz)]
+    
