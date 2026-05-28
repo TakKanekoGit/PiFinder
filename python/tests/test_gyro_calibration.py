@@ -32,16 +32,27 @@ def test_set_offsets(gyro_calib):
 
 
 def test_gyro_calibration_estimate(gyro_calib):
-    # Test the estimate method of the GyroCalibration class
-    gyro_calib.estimate()
+    # Test calibration estimate: Constant input
+    assert gyro_calib.valid is False
+
+    gyro = np.deg2rad([0.1, 0.2, 0.3])
+    for ii in range(GyroCalibration.N_GYRO_CAL_SAMPLES):  
+        gyro_calib.estimate(gyro)  # Fill buffer with N_GYRO_CAL_SAMPLES
+    assert gyro_calib._buffer_full
+
+    breakpoint()
+    assert gyro_calib.valid
     assert gyro_calib.offsets is not None
     assert isinstance(gyro_calib.offsets, np.ndarray)
-    assert gyro_calib.valid is True
+    assert np.all(gyro_calib.offsets == gyro)
 
 def test_gyro_calibration_apply(gyro_calib):
     # Test the apply method of the GyroCalibration class
-    gyro_calib.estimate()
-    gyro = np.array([1.0, 2.0, 3.0])
+    gyro_calib.set_offsets([0.1, 0.2, 0.3])
+    assert gyro_calib.valid
+
+    gyro = np.deg2rad([0.1, 0.2, 0.3])
+    gyro_calib.estimate(gyro)
     result = gyro_calib.apply(gyro)
     assert result is not None
     assert np.array_equal(result, gyro - gyro_calib.offsets)
