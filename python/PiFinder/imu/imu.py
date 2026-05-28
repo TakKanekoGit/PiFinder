@@ -289,6 +289,6 @@ def angular_velocity_to_quaternion(
     axis = omega / omega_norm  # Rotation axis
     half_theta = 0.5 * theta
     dq = quaternion.quaternion(np.cos(half_theta), *(axis * np.sin(half_theta)))
-    quat = (q * dq).normalized()  # Apply incremental rotation
+    quat = (prev_quat * dq).normalized()  # Apply incremental rotation
 
     return quat
