@@ -60,10 +60,10 @@ def _configure_gyro(sensor: adafruit_bno055.BNO055_I2C) -> adafruit_bno055.BNO05
     GYRO_523HZ, GYRO_230HZ, GYRO_116HZ, GYRO_47HZ, GYRO_23HZ, GYRO_12HZ
     GYRO_64HZ, GYRO_32HZ
     """
-    # Configure accelerometer: Range +/-4G, Bandwidth 7.81Hz
-    sensor.accel_range = adafruit_bno055.ACCEL_4G
-    sensor.accel_bandwidth = adafruit_bno055.ACCEL_7_81HZ
-    logger.info("IMU: Cofigured accelerometer range and bandwidth")
+    # Configure gyro: Range +/-500 dps, Bandwidth 12Hz
+    sensor.gyro_range = adafruit_bno055.GYRO_500_DPS
+    sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
+    logger.info("IMU: Cofigured gyro range and bandwidth")
     return sensor
 
 
@@ -78,10 +78,10 @@ def _configure_accelerometer(sensor: adafruit_bno055.BNO055_I2C) -> adafruit_bno
     ACCEL_7_81HZ, ACCEL_15_63HZ, ACCEL_31_25HZ, ACCEL_62_5HZ,
     ACCEL_125HZ, ACCEL_250HZ, ACCEL_500HZ, ACCEL_1000HZ
     """
-    # Configure gyro: Range +/-500 dps, Bandwidth 12Hz
-    sensor.gyro_range = adafruit_bno055.GYRO_500_DPS
-    sensor.gyro_bandwidth = adafruit_bno055.GYRO_12HZ
-    logger.info("IMU: Cofigured gyro range and bandwidth")
+    # Configure accelerometer: Range +/-4G, Bandwidth 7.81Hz
+    sensor.accel_range = adafruit_bno055.ACCEL_4G
+    sensor.accel_bandwidth = adafruit_bno055.ACCEL_7_81HZ
+    logger.info("IMU: Cofigured accelerometer range and bandwidth")
     return sensor
 
 
