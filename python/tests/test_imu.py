@@ -9,12 +9,14 @@ import time
 from PiFinder.imu.imu_data import ImuData
 from PiFinder.imu.imu import Imu, ImuMovingStatus
 
+EMULATE = True
+
 # Test Imu class:
 
 @pytest.fixture(params=[True, False])
 def setup_imu(request):
     # This method will run once before all tests
-    return Imu(enable_accel=request.param, emulate=True)
+    return Imu(enable_accel=request.param, emulate=EMULATE)
 
 def test_init(setup_imu):
     # Test the initialization of the Imu class
