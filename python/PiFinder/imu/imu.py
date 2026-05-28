@@ -81,7 +81,7 @@ class Imu:
     
     NOTE: Not all accelerometer features available but included for development
     """
-    IMU_SAMPLE_FREQUENCY = 30  # [Hz] Should be > 2 * sensor bandwidth
+    IMU_SAMPLE_FREQUENCY = 24  # [Hz] Should be > 2 * sensor bandwidth
     MAX_SLEEP_TIME = 1.0  # [s] Max sleep time to avoid sleeping for too long
 
     accel_enabled: bool
@@ -190,6 +190,9 @@ class Imu:
         Check for outlier, limits, etc.
         TODO 
         """
+        if gyro is None:
+            return False
+        
         return True  # True if no outliers
 
     def update(self) -> bool:
@@ -226,11 +229,15 @@ class Imu:
                 return False  # Calibration failed
         
         # Apply calibration
+        assert gyro is not None  # TODO: Remove later
         gyro = self.gyro_calibration.apply(gyro)
 
         # Check if the new data is an outlier or has hit the range limits
         if not self._check_valid_data(gyro):
             return False
+
+        g = np.rad2deg(gyro)
+        print(f"IMU ang vel: {g[0]:.3f}, {g[1]:.3f}, {g[2]:.3f} deg/s")
 
         # Construct quaternion
         if self._prev_quat is None:
