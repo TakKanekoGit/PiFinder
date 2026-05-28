@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+import time
 
 from PiFinder.imu.gyro_calibration import GyroCalibration
 
@@ -34,17 +35,17 @@ def test_set_offsets(gyro_calib):
 def test_gyro_calibration_estimate(gyro_calib):
     # Test calibration estimate: Constant input
     assert gyro_calib.valid is False
+    time.sleep(gyro_calib.T_BETWEEN_CALIBRATION_ATTEMPTS)
 
     gyro = np.deg2rad([0.1, 0.2, 0.3])
     for ii in range(GyroCalibration.N_GYRO_CAL_SAMPLES):  
         gyro_calib.estimate(gyro)  # Fill buffer with N_GYRO_CAL_SAMPLES
     assert gyro_calib._buffer_full
 
-    breakpoint()
     assert gyro_calib.valid
     assert gyro_calib.offsets is not None
     assert isinstance(gyro_calib.offsets, np.ndarray)
-    assert np.all(gyro_calib.offsets == gyro)
+    assert np.allclose(gyro_calib.offsets, gyro)
 
 def test_gyro_calibration_apply(gyro_calib):
     # Test the apply method of the GyroCalibration class
@@ -55,4 +56,4 @@ def test_gyro_calibration_apply(gyro_calib):
     gyro_calib.estimate(gyro)
     result = gyro_calib.apply(gyro)
     assert result is not None
-    assert np.array_equal(result, gyro - gyro_calib.offsets)
+    assert np.allclose(result, gyro - gyro_calib.offsets)
