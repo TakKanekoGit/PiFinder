@@ -1,10 +1,10 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
 '''
-For testing the IMU: Not for use by PiFinder main loop.
-Prints the IMU measurements (based on imu_pi.py)
+For development: Light-weight testing of For testing the IMU: Not for use by
+PiFinder main loop. Prints and stores the raw IMU measurements.
 
-TODO: Remove this in the future.
+TODO: Use the same format at telemetry in the future
 '''
 
 import adafruit_bno055
