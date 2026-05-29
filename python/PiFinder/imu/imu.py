@@ -169,7 +169,7 @@ class Imu:
         else:
             raise ValueError(f"Unexpected gyro type: {type(gyro)}")
         
-        return timestamp, gyro
+        return timestamp, gyro  # [s, rad/s]
     
     def _read_accel_gyro_from_imu(self) -> tuple[float, NdarrayNone, NdarrayNone]:
         accel = self.sensor.acceleration  # Acceleration in m/s^2
@@ -235,9 +235,6 @@ class Imu:
         # Check if the new data is an outlier or has hit the range limits
         if not self._check_valid_data(gyro):
             return False
-
-        g = np.rad2deg(gyro)
-        print(f"IMU ang vel: {g[0]:.3f}, {g[1]:.3f}, {g[2]:.3f} deg/s")
 
         # Construct quaternion
         if self._prev_quat is None:
