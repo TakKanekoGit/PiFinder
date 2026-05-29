@@ -239,16 +239,17 @@ class Imu:
         # Construct quaternion
         if self._prev_quat is None:
             # TODO: Additional checks when _prev_quat is None. E.g. Need to plate solve to sync
-            self._prev_quat = np.quaternion(1, 0, 0, 0)  # Assume identity orientation
-        quat = angular_velocity_to_quaternion(gyro, timestamp, self._prev_quat, self._prev_data_timestamp)
+            self._prev_quat = np.quaternion(1, 0, 0, 0)  # Reset to identity orientation
+        quat = angular_velocity_to_quaternion(timestamp=timestamp, ang_vel=gyro, 
+                                              prev_timestamp=self._prev_data_timestamp, prev_quat=self._prev_quat)
 
         assert isinstance(timestamp, float)
         self.imu_data.set(timestamp, accel=accel, gyro=gyro, quat=quat)
         self.moving_status.update(self.imu_data)  # Determine if moving
 
         # Valid sample obtained: Update previous values
-        self._prev_data_timestamp = self.imu_data.timestamp
-        self._prev_quat = self.imu_data.quat
+        self._prev_data_timestamp = timestamp
+        self._prev_quat = quat
 
         return True # New sample available
 
@@ -265,10 +266,10 @@ class Imu:
 
 
 def angular_velocity_to_quaternion(
-        ang_vel: Union[np.ndarray, list],  # Angular velocity [rad/s]
         timestamp: float,  # Timestamp [s] of gyro measurement
-        prev_quat: QuaternionNone,  # Previous quaternion
+        ang_vel: Union[np.ndarray, list],  # Angular velocity [rad/s]
         prev_timestamp: float,  # Timestamp [s] of prev_quat
+        prev_quat: QuaternionNone,  # Previous quaternion
         ) -> QuaternionNone:
     """
     Integrate angular velocity measurements from the gyro into orientation
@@ -282,7 +283,7 @@ def angular_velocity_to_quaternion(
 
     dt = timestamp - prev_timestamp
     if dt <= 0:
-        logger.info("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
+        logger.warning("IMU: Previous timestamp same or older than current timestamp. Ignoring IMU sample.")
         return None
 
     omega = np.array(ang_vel)
@@ -296,5 +297,9 @@ def angular_velocity_to_quaternion(
     half_theta = 0.5 * theta
     dq = quaternion.quaternion(np.cos(half_theta), *(axis * np.sin(half_theta)))
     quat = (prev_quat * dq).normalized()  # Apply incremental rotation
+
+    # Enforce continuity of quaternion
+    if np.dot(quaternion.as_float_array(quat), quaternion.as_float_array(prev_quat)) < 0:
+        quat = -quat
 
     return quat

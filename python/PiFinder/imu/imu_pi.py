@@ -50,6 +50,7 @@ def imu_monitor(shared_state, console_queue, log_queue, enable_accel=False):
         "status": 0,  # IMU Status: 3=Calibrated
     }
 
+    #ii = 0  # FOR DEBUGGING
     while True:
         # Read IMU data, check validity, apply calibration and process 
         imu.update()
@@ -66,6 +67,11 @@ def imu_monitor(shared_state, console_queue, log_queue, enable_accel=False):
             if shared_state is not None:
                 shared_state.set_imu(imu_data)
 
+            # FOR DEBUGGING:
+            #if ii % 10 == 0:
+            #    print(f"IMU: Gyro: {np.rad2deg(imu.imu_data.gyro)} deg/s   Quat: {imu.imu_data.quat}")
+            #    ii = 0    
+            #ii += 1
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
