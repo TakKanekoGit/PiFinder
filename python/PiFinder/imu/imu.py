@@ -75,7 +75,7 @@ class ImuMovingStatus:
 
 class Imu:
     """
-    Previous version modified the IMU axes but the IMU now outputs the
+    The previous version modified the IMU axes but the IMU now outputs the
     measurements using its native axes and the transformation from the IMU
     axes to the camera frame is done by the IMU dead-reckonig functionality.
     

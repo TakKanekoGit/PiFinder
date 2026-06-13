@@ -1,21 +1,41 @@
-"""
-Base class to interface with different IMU sensors
-
-Enalbes interfacing to different IMUs and running in different modes in an
-uniform way. Some IMUs may not support all the methods.
-"""
-
 from abc import ABC
 
 
 class ImuSensor(ABC):
-    
+    """
+    Base class to interface with different IMU sensors
+
+    Enalbes interfacing to different IMUs and running in different modes in an
+    uniform way. Some IMUs may not support all the methods.
+    """
+    sensor: object
+    imu_mode: str
+
+    gyro_enabled: bool = False
+    gyro_bandwidth: float
+    gyro_specs: GyroSpecs
+
+    accelerometer_enabled: bool = False
+    accelerometer_bandwidth: float
+
     def __init__(self):
         pass
 
     @abstractmethod
     def configure(self):
         pass
+
+    def _reset_configurations(self):
+        """ NOTE: This does not reset the sensor """
+        self.sensor = None
+        self.imu_mode = None
+
+        self.gyro_enabled = False
+        self.gyro_bandwidth = None
+        self.gyro_specs = None
+
+        self.accelerometer_enabled = False
+        self.accelerometer_bandwidth = None 
 
     # ------ Configures the IMU mode ----------
 
@@ -65,11 +85,18 @@ class ImuSensor(ABC):
 
 
 @dataclass
-class GyroSpecs:
-    """ Gyro specs from the data sheet. Use for calibration & simulations """
+class GyroSpecs(ABC):
+    """ 
+    Gyro specs from the data sheet. Use for calibration & simulations 
+    """
     zero_rate_offset: Union[float, None] = None  # Max zero rate offset [rad/s]
     output_noise_density: Union[float, None] = None  # Max output noise density [rad/s/sqrt(Hz)]
+    bandwidth: Union[float, Non] = None  # Bandwidth [Hz]
 
-    def output_noise(self, bandwidth: float):
-        """ Expected output noise per sample for a given bandwidth [Hz] """
-        return self.output_noise_density * np.sqrt(bandwidth)  # [rad/s/sqrt(Hz)]
+    def __post_init__():
+        if self.bandwidth is None:
+            raise ValueError("Bandwidth must be set")
+
+    def output_noise(self):
+        """ Expected output noise per sample for a given bandwidth """
+        return self.output_noise_density * np.sqrt(self.bandwidth)  # [rad/s/sqrt(Hz)]
