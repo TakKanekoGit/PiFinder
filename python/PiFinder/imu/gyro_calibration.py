@@ -6,7 +6,7 @@ import numpy as np
 from typing import Union
 import time
 
-from PiFinder.imu.imu_sensor_bno055 import GyroSpecs
+from PiFinder.imu.imu_sensor_bno055 import GyroSpecsBno055
 
 NdarrayNone = Union[np.ndarray, None]
 

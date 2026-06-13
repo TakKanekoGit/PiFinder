@@ -108,7 +108,7 @@ class Imu:
         self.moving_status = ImuMovingStatus()
         self.reset_internal_states()
 
-    def _init_sensor(self, enable_accel: bool = False, emulate: bool = False):
+    def _init_sensor(self, imu_mode: str = "gyro", emulate: bool = False):
         """
         Initializes the IMU sensor or the emulator.
 
@@ -117,10 +117,11 @@ class Imu:
         """
         if emulate:
             from PiFinder.imu.imu_sensor_emulator import configure_imu_sensor_emulator
-            sensor = configure_imu_sensor_emulator(enable_accel)
+            sensor = configure_imu_sensor_emulator(imu_mode)  # TODO: Update
         else:
-            from PiFinder.imu.imu_sensor_bno055 import configure_imu_sensor_bno055
-            sensor = configure_imu_sensor_bno055(enable_accel)
+            from PiFinder.imu.imu_sensor_bno055 import ImuSensorBno055
+            sensor = ImuSensorBno055(imu_mode)
+            # TODO: Returns ImuSensor rather than sensor. Update the interfaces to sensor below
 
         return sensor
 
